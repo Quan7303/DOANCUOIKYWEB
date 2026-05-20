@@ -1,7 +1,3 @@
-/**
- * uploadRoutes.js
- * Chức năng: Định tuyến API upload ảnh và like tác phẩm
- */
 
 import express from 'express'
 import { createPortfolio, deletePortfolio, toggleLike } from '../controllers/uploadController.js'
@@ -15,8 +11,5 @@ router.post('/', protect, uploadSingle, createPortfolio)
 
 // DELETE /api/portfolios/:id - Xóa tác phẩm
 router.delete('/:id', protect, deletePortfolio)
-
-// POST /api/portfolios/:id/like - Toggle like/unlike
-router.post('/:id/like', protect, toggleLike)
 
 export default router
