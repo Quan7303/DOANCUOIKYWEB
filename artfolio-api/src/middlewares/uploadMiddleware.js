@@ -1,12 +1,4 @@
-/**
- * uploadMiddleware.js
- * Chức năng: Middleware xử lý upload ảnh
- * - Dùng Multer để nhận file từ FormData
- * - Dùng CloudinaryStorage để đẩy ảnh thẳng lên Cloudinary (không lưu local)
- * - Giới hạn kích thước 10MB, chỉ chấp nhận image/*
- *
- * Task 4.1 - Thành viên 4
- */
+
 
 import { v2 as cloudinary } from 'cloudinary'
 import { CloudinaryStorage } from 'multer-storage-cloudinary'
