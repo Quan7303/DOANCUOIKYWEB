@@ -4,6 +4,7 @@ import cookieParser from 'cookie-parser'
 import { env } from './config/environment.js'
 import { connectDatabase } from './config/mongodb.js'
 import { errorHandlingMiddleware } from './middlewares/errorHandlingMiddleware.js'
+import { APIs_V1 } from './routes/v1/index.js'
 import { mapOrder } from './utils/sorts.js'
 
 
@@ -29,6 +30,9 @@ const startServer = async () => {
     ))
     res.end('<h1>Welcome to ArtFolio API Server!</h1><hr>')
   })
+
+  // Đăng ký API v1
+  app.use('/v1', APIs_V1)
 
   // Đợi kết nối MongoDB Atlas thành công rồi mới khởi chạy Server Express
   await connectDatabase()
