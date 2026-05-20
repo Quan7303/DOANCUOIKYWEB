@@ -4,13 +4,21 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { updateProfileAction } from "../actions/profileActions";
 import ExportPdfButton from "../components/ExportPdfButton";
 import { useAuthStore } from "../store/useAuthStore";
-import type { AuthUser, PortfolioDetail, PortfolioPdfProfile } from "../types/api";
-import { profileActionSchema, type ProfileActionValues } from "../utils/validationSchemas";
+import type {
+  AuthUser,
+  PortfolioDetail,
+  PortfolioPdfProfile,
+} from "../types/api";
+import {
+  profileActionSchema,
+  type ProfileActionValues,
+} from "../utils/validationSchemas";
+import DashboardUploadForm from "./DashboardUploadForm";
 
 type DashboardClientProps = {
   user: AuthUser;
@@ -25,12 +33,131 @@ const categoryLabels: Record<string, string> = {
   other: "Other",
 };
 
-export default function DashboardClient({ user, myPortfolios }: DashboardClientProps) {
+const LOCAL_PORTFOLIOS_KEY = "artfolio-local-portfolios";
+const LIKE_COUNTS_KEY = "artfolio-like-counts";
+
+function readLikeCounts(): Record<string, number> {
+  if (typeof window === "undefined") return {};
+
+  try {
+    const raw = localStorage.getItem(LIKE_COUNTS_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, number>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function getPortfolioId(portfolio: PortfolioDetail) {
+  const item = portfolio as PortfolioDetail & {
+    id?: string;
+    slug?: string;
+  };
+
+  return item._id || item.id || item.slug || portfolio.title;
+}
+
+function applyLocalLikeCounts(items: PortfolioDetail[]) {
+  const likeCounts = readLikeCounts();
+
+  return items.map((item) => {
+    const portfolioId = getPortfolioId(item);
+
+    if (typeof likeCounts[portfolioId] !== "number") {
+      return item;
+    }
+
+    return {
+      ...item,
+      likesCount: likeCounts[portfolioId],
+    };
+  });
+}
+
+function mergePortfolios(
+  localPortfolios: PortfolioDetail[],
+  basePortfolios: PortfolioDetail[]
+) {
+  const existedIds = new Set<string>();
+  const result: PortfolioDetail[] = [];
+
+  [...localPortfolios, ...basePortfolios].forEach((item) => {
+    const id = getPortfolioId(item);
+
+    if (existedIds.has(id)) return;
+
+    existedIds.add(id);
+    result.push(item);
+  });
+
+  return result;
+}
+
+function readLocalPortfolios(): PortfolioDetail[] {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const raw = localStorage.getItem(LOCAL_PORTFOLIOS_KEY);
+    return raw ? (JSON.parse(raw) as PortfolioDetail[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalPortfolios(items: PortfolioDetail[]) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(LOCAL_PORTFOLIOS_KEY, JSON.stringify(items));
+}
+
+export default function DashboardClient({
+  user,
+  myPortfolios,
+}: DashboardClientProps) {
   const router = useRouter();
   const { logout } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<"profile" | "portfolios" | "export">("profile");
-  const [submitResult, setSubmitResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const [portfolios, setPortfolios] =
+    useState<PortfolioDetail[]>(myPortfolios);
+
+useEffect(() => {
+  const syncPortfolios = () => {
+    const localPortfolios = readLocalPortfolios();
+    const merged = mergePortfolios(localPortfolios, myPortfolios);
+    const portfoliosWithLatestLikes = applyLocalLikeCounts(merged);
+
+    setPortfolios(portfoliosWithLatestLikes);
+  };
+
+  syncPortfolios();
+
+  window.addEventListener("focus", syncPortfolios);
+  window.addEventListener("storage", syncPortfolios);
+  window.addEventListener("artfolio-like-updated", syncPortfolios);
+
+  return () => {
+    window.removeEventListener("focus", syncPortfolios);
+    window.removeEventListener("storage", syncPortfolios);
+    window.removeEventListener("artfolio-like-updated", syncPortfolios);
+  };
+}, [myPortfolios]);
+  const [toastMessage, setToastMessage] = useState("");
+  const [activeTab, setActiveTab] = useState<
+    "profile" | "upload" | "portfolios" | "export"
+  >("profile");
+
+  const [submitResult, setSubmitResult] = useState<{
+    ok: boolean;
+    message: string;
+  } | null>(null);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const totalLikes = useMemo(() => {
+    return portfolios.reduce((sum, item) => sum + item.likesCount, 0);
+  }, [portfolios]);
+
+  const totalViews = useMemo(() => {
+    return portfolios.reduce((sum, item) => sum + item.views, 0);
+  }, [portfolios]);
 
   const {
     register,
@@ -50,8 +177,12 @@ export default function DashboardClient({ user, myPortfolios }: DashboardClientP
   const onSubmit = async (values: ProfileActionValues) => {
     setIsSubmitting(true);
     setSubmitResult(null);
+
     const formData = new FormData();
-    Object.entries(values).forEach(([key, val]) => formData.append(key, val ?? ""));
+    Object.entries(values).forEach(([key, val]) =>
+      formData.append(key, val ?? "")
+    );
+
     const result = await updateProfileAction(formData);
     setSubmitResult(result);
     setIsSubmitting(false);
@@ -62,6 +193,28 @@ export default function DashboardClient({ user, myPortfolios }: DashboardClientP
     router.push("/");
   };
 
+  const handleCreatedPortfolio = (portfolio: PortfolioDetail) => {
+    const currentLocalPortfolios = readLocalPortfolios();
+
+    const updatedLocalPortfolios = mergePortfolios(
+      [portfolio],
+      currentLocalPortfolios
+    );
+
+    saveLocalPortfolios(updatedLocalPortfolios);
+
+    setPortfolios((current) =>
+      applyLocalLikeCounts(mergePortfolios(updatedLocalPortfolios, current))
+    );
+
+    setToastMessage("Đăng tác phẩm thành công.");
+    setActiveTab("portfolios");
+
+    window.setTimeout(() => {
+      setToastMessage("");
+    }, 2500);
+  };
+
   const pdfProfile: PortfolioPdfProfile = {
     name: user.name,
     email: user.email,
@@ -69,7 +222,7 @@ export default function DashboardClient({ user, myPortfolios }: DashboardClientP
     skills: [],
     experience: [],
     socialLinks: [],
-    works: myPortfolios.map((p) => ({
+    works: portfolios.map((p) => ({
       title: p.title,
       category: p.category,
       description: p.description,
@@ -78,31 +231,53 @@ export default function DashboardClient({ user, myPortfolios }: DashboardClientP
 
   const tabs = [
     { key: "profile" as const, label: "Hồ sơ" },
-    { key: "portfolios" as const, label: `Tác phẩm (${myPortfolios.length})` },
+    { key: "upload" as const, label: "Đăng tác phẩm" },
+    { key: "portfolios" as const, label: `Tác phẩm (${portfolios.length})` },
     { key: "export" as const, label: "Xuất PDF" },
   ];
 
   return (
     <section className="py-8 sm:py-10">
       <div className="app-container">
-        <div className="mb-6 flex items-end justify-between border-b border-border pb-6">
+        <div className="mb-6 flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="mb-2 text-sm font-bold uppercase text-primary">Dashboard</p>
-            <h1 className="text-3xl font-bold leading-tight sm:text-4xl">Không gian cá nhân</h1>
+            <p className="mb-2 text-sm font-bold uppercase text-primary">
+              Dashboard
+            </p>
+            <h1 className="text-3xl font-bold leading-tight sm:text-4xl">
+              Không gian cá nhân
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm text-muted">
+              Quản lý hồ sơ, đăng tác phẩm mới, xem danh sách portfolio cá nhân
+              và xuất hồ sơ sáng tạo ra PDF.
+            </p>
           </div>
-          <button
-            type="button"
-            className="btn btn-secondary text-sm"
-            onClick={handleLogout}
-          >
-            Đăng xuất
-          </button>
-        </div>
 
+          <div className="flex gap-3">
+            <button
+              type="button"
+              className="btn btn-primary text-sm"
+              onClick={() => setActiveTab("upload")}
+            >
+              Đăng tác phẩm
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-secondary text-sm"
+              onClick={handleLogout}
+            >
+              Đăng xuất
+            </button>
+          </div>
+        </div>
+        {toastMessage && (
+          <div className="mb-5 rounded-lg border border-border bg-surface-soft p-3 text-sm font-semibold text-foreground">
+            {toastMessage}
+          </div>
+        )}
         <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
-          {/* Sidebar */}
           <aside className="grid h-fit gap-4">
-            {/* User card */}
             <div className="surface grid gap-4 rounded-lg p-5">
               {user.avatar ? (
                 <Image
@@ -110,35 +285,46 @@ export default function DashboardClient({ user, myPortfolios }: DashboardClientP
                   alt={user.name}
                   width={72}
                   height={72}
-                  className="rounded-full"
+                  sizes="72px"
+                  className="rounded-full object-cover"
                 />
               ) : (
                 <div className="grid h-[72px] w-[72px] place-items-center rounded-full bg-primary text-2xl font-bold text-white">
                   {user.name.slice(0, 1)}
                 </div>
               )}
+
               <div>
                 <p className="font-bold">{user.name}</p>
                 <p className="text-sm text-muted">{user.email}</p>
-                {user.role === "admin" && (
-                  <span className="badge mt-2">Admin</span>
-                )}
+                {user.role === "admin" && <span className="badge mt-2">Admin</span>}
               </div>
+
               <div className="grid grid-cols-2 gap-2 text-center">
                 <div className="rounded-lg border border-border bg-surface-soft p-3">
-                  <strong className="block text-xl">{myPortfolios.length}</strong>
+                  <strong className="block text-xl">{portfolios.length}</strong>
                   <span className="text-xs text-muted">tác phẩm</span>
                 </div>
+
+                <div className="rounded-lg border border-border bg-surface-soft p-3">
+                  <strong className="block text-xl">{totalLikes}</strong>
+                  <span className="text-xs text-muted">lượt thích</span>
+                </div>
+
+                <div className="rounded-lg border border-border bg-surface-soft p-3">
+                  <strong className="block text-xl">{totalViews}</strong>
+                  <span className="text-xs text-muted">lượt xem</span>
+                </div>
+
                 <div className="rounded-lg border border-border bg-surface-soft p-3">
                   <strong className="block text-xl">
-                    {myPortfolios.reduce((s, p) => s + p.likesCount, 0)}
+                    {user.role === "admin" ? "Admin" : "User"}
                   </strong>
-                  <span className="text-xs text-muted">lượt thích</span>
+                  <span className="text-xs text-muted">vai trò</span>
                 </div>
               </div>
             </div>
 
-            {/* Nav tabs */}
             <nav className="surface overflow-hidden rounded-lg">
               {tabs.map((tab) => (
                 <button
@@ -157,9 +343,7 @@ export default function DashboardClient({ user, myPortfolios }: DashboardClientP
             </nav>
           </aside>
 
-          {/* Main panel */}
           <div>
-            {/* Tab: Hồ sơ */}
             {activeTab === "profile" && (
               <div className="surface rounded-lg p-5 sm:p-7">
                 <h2 className="mb-5 text-xl font-bold">Chỉnh sửa hồ sơ</h2>
@@ -176,7 +360,11 @@ export default function DashboardClient({ user, myPortfolios }: DashboardClientP
                   </div>
                 )}
 
-                <form className="grid gap-5" noValidate onSubmit={handleSubmit(onSubmit)}>
+                <form
+                  className="grid gap-5"
+                  noValidate
+                  onSubmit={handleSubmit(onSubmit)}
+                >
                   <input type="hidden" {...register("userId")} />
 
                   <label className="field">
@@ -186,7 +374,9 @@ export default function DashboardClient({ user, myPortfolios }: DashboardClientP
                       placeholder="Nguyen Van A"
                       {...register("name")}
                     />
-                    {errors.name && <span className="error-text">{errors.name.message}</span>}
+                    {errors.name && (
+                      <span className="error-text">{errors.name.message}</span>
+                    )}
                   </label>
 
                   <label className="field">
@@ -197,30 +387,40 @@ export default function DashboardClient({ user, myPortfolios }: DashboardClientP
                       disabled
                       title="Email không thể thay đổi"
                     />
-                    <span className="text-xs text-muted">Email không thể thay đổi.</span>
+                    <span className="text-xs text-muted">
+                      Email không thể thay đổi.
+                    </span>
                   </label>
 
                   <label className="field">
                     <span className="label">Kỹ năng</span>
                     <input
                       className={`input${errors.skills ? " input-error" : ""}`}
-                      placeholder="Figma, Branding, UI/UX (cách nhau bằng dấu phẩy)"
+                      placeholder="Figma, Branding, UI/UX"
                       {...register("skills")}
                     />
-                    {errors.skills && <span className="error-text">{errors.skills.message}</span>}
-                    <span className="text-xs text-muted">Nhập các kỹ năng cách nhau bằng dấu phẩy.</span>
+                    {errors.skills && (
+                      <span className="error-text">{errors.skills.message}</span>
+                    )}
+                    <span className="text-xs text-muted">
+                      Nhập các kỹ năng cách nhau bằng dấu phẩy.
+                    </span>
                   </label>
 
                   <label className="field">
                     <span className="label">Kinh nghiệm</span>
                     <textarea
                       rows={4}
-                      className={`input h-auto py-2.5 leading-relaxed${errors.experience ? " input-error" : ""}`}
+                      className={`input h-auto py-2.5 leading-relaxed${
+                        errors.experience ? " input-error" : ""
+                      }`}
                       placeholder="Mô tả ngắn kinh nghiệm làm việc..."
                       {...register("experience")}
                     />
                     {errors.experience && (
-                      <span className="error-text">{errors.experience.message}</span>
+                      <span className="error-text">
+                        {errors.experience.message}
+                      </span>
                     )}
                   </label>
 
@@ -231,13 +431,20 @@ export default function DashboardClient({ user, myPortfolios }: DashboardClientP
                       placeholder="https://github.com/..., https://dribbble.com/..."
                       {...register("socialLinks")}
                     />
-                    <span className="text-xs text-muted">Nhập các link cách nhau bằng dấu phẩy.</span>
+                    <span className="text-xs text-muted">
+                      Nhập các link cách nhau bằng dấu phẩy.
+                    </span>
                   </label>
 
                   <div className="flex gap-3">
-                    <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+                    <button
+                      type="submit"
+                      className="btn btn-primary"
+                      disabled={isSubmitting}
+                    >
                       {isSubmitting ? "Đang lưu..." : "Lưu thay đổi"}
                     </button>
+
                     <button type="reset" className="btn btn-secondary">
                       Đặt lại
                     </button>
@@ -246,50 +453,76 @@ export default function DashboardClient({ user, myPortfolios }: DashboardClientP
               </div>
             )}
 
-            {/* Tab: Tác phẩm */}
+            {activeTab === "upload" && (
+              <DashboardUploadForm
+                user={user}
+                onCreated={handleCreatedPortfolio}
+              />
+            )}
+
             {activeTab === "portfolios" && (
               <div className="grid gap-4">
-                <div className="surface flex items-center justify-between rounded-lg p-4">
-                  <h2 className="font-bold">Tác phẩm của tôi</h2>
-                  <Link href="/portfolios" className="btn btn-secondary text-sm">
-                    Khám phá thêm
-                  </Link>
+                <div className="surface flex flex-col gap-3 rounded-lg p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className="font-bold">Tác phẩm của tôi</h2>
+                    <p className="mt-1 text-sm text-muted">
+                      Upload thành công sẽ hiển thị ngay trong danh sách này.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn btn-primary text-sm"
+                    onClick={() => setActiveTab("upload")}
+                  >
+                    Thêm tác phẩm
+                  </button>
                 </div>
 
-                {myPortfolios.length === 0 ? (
+                {portfolios.length === 0 ? (
                   <div className="surface rounded-lg p-10 text-center">
                     <p className="text-lg font-bold">Chưa có tác phẩm nào</p>
                     <p className="mt-2 text-sm text-muted">
-                      Tài khoản mới chưa có portfolio. Liên hệ admin để thêm.
+                      Hãy đăng tác phẩm đầu tiên để xây dựng portfolio cá nhân.
                     </p>
+
+                    <button
+                      type="button"
+                      className="btn btn-primary mt-5"
+                      onClick={() => setActiveTab("upload")}
+                    >
+                      Upload your first shot
+                    </button>
                   </div>
                 ) : (
                   <div className="grid gap-4 sm:grid-cols-2">
-                    {myPortfolios.map((portfolio) => (
+                    {portfolios.map((portfolio) => (
                       <Link
                         key={portfolio._id}
                         href={`/portfolio/${portfolio._id}`}
                         className="surface group flex gap-4 rounded-lg p-4 transition hover:-translate-y-0.5"
                       >
-                        <div className="relative h-20 w-28 shrink-0 overflow-hidden rounded-md bg-surface-soft">
-                          <Image
+                        <div className="h-20 w-28 shrink-0 overflow-hidden rounded-md bg-surface-soft">
+                          <img
                             src={portfolio.images[0]}
                             alt={portfolio.title}
-                            fill
-                            sizes="112px"
-                            className="object-cover"
+                            className="h-full w-full object-cover"
                           />
                         </div>
+
                         <div className="min-w-0">
                           <h3 className="truncate font-bold group-hover:text-primary">
                             {portfolio.title}
                           </h3>
+
                           <span className="badge mt-1">
-                            {categoryLabels[portfolio.category] ?? portfolio.category}
+                            {categoryLabels[portfolio.category] ??
+                              portfolio.category}
                           </span>
+
                           <p className="mt-2 text-sm text-muted">
-                            ❤ {portfolio.likesCount.toLocaleString("vi-VN")} ·{" "}
-                            👁 {portfolio.views.toLocaleString("vi-VN")}
+                            ❤ {portfolio.likesCount.toLocaleString("vi-VN")} · 👁{" "}
+                            {portfolio.views.toLocaleString("vi-VN")}
                           </p>
                         </div>
                       </Link>
@@ -299,29 +532,35 @@ export default function DashboardClient({ user, myPortfolios }: DashboardClientP
               </div>
             )}
 
-            {/* Tab: Xuất PDF */}
             {activeTab === "export" && (
               <div className="surface rounded-lg p-5 sm:p-7">
-                <h2 className="mb-2 text-xl font-bold">Xuất Portfolio ra PDF</h2>
+                <h2 className="mb-2 text-xl font-bold">
+                  Xuất Portfolio ra PDF
+                </h2>
                 <p className="mb-6 text-sm text-muted">
-                  File PDF sẽ bao gồm thông tin hồ sơ và danh sách tác phẩm của bạn.
+                  File PDF sẽ bao gồm thông tin hồ sơ và danh sách tác phẩm của
+                  bạn.
                 </p>
 
-                {/* Preview */}
                 <div className="mb-6 grid gap-3 rounded-lg border border-border bg-surface-soft p-5 text-sm">
                   <div>
                     <p className="text-xs font-bold uppercase text-muted">Tên</p>
                     <p className="font-semibold">{pdfProfile.name}</p>
                   </div>
+
                   <div>
-                    <p className="text-xs font-bold uppercase text-muted">Email</p>
+                    <p className="text-xs font-bold uppercase text-muted">
+                      Email
+                    </p>
                     <p>{pdfProfile.email}</p>
                   </div>
-                  {pdfProfile.works.length > 0 && (
+
+                  {pdfProfile.works.length > 0 ? (
                     <div>
                       <p className="text-xs font-bold uppercase text-muted">
                         Tác phẩm ({pdfProfile.works.length})
                       </p>
+
                       <ul className="mt-1 grid gap-0.5">
                         {pdfProfile.works.map((w) => (
                           <li key={w.title} className="text-muted">
@@ -333,9 +572,10 @@ export default function DashboardClient({ user, myPortfolios }: DashboardClientP
                         ))}
                       </ul>
                     </div>
-                  )}
-                  {pdfProfile.works.length === 0 && (
-                    <p className="text-muted">Chưa có tác phẩm nào trong hồ sơ.</p>
+                  ) : (
+                    <p className="text-muted">
+                      Chưa có tác phẩm nào trong hồ sơ.
+                    </p>
                   )}
                 </div>
 
