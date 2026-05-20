@@ -1,14 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
-import { useThemeStore } from "../store/useThemeStore";
+import { Toaster } from "react-hot-toast";
 
-export default function ThemeInitializer() {
-  const initializeTheme = useThemeStore((state) => state.initializeTheme);
-
-  useEffect(() => {
-    initializeTheme();
-  }, [initializeTheme]);
-
-  return null;
+export default function AppToastProvider() {
+  return <Toaster position="top-right" />;
 }
