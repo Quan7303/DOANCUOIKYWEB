@@ -5,6 +5,8 @@ import { env } from './config/environment.js'
 import { connectDatabase } from './config/mongodb.js'
 import { mapOrder } from './utils/sorts.js'
 
+
+
 const startServer = async () => {
   const app = express()
 
@@ -12,6 +14,7 @@ const startServer = async () => {
   app.use(cors())
   app.use(express.json())
   app.use(cookieParser())
+
 
   // Route kiểm tra sức khỏe hệ thống (Health check)
   app.get('/', (req, res) => {
