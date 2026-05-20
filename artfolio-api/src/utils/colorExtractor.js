@@ -1,28 +1,13 @@
-/**
- * colorExtractor.js
- * Chức năng: Trích xuất mảng màu HEX chủ đạo từ URL ảnh Cloudinary
- * Dùng thư viện sharp để đọc ảnh, sau đó tính màu trung bình theo vùng
- *
- * Task 4.1 - Thành viên 4
- *
- * Cách hoạt động:
- * 1. Fetch ảnh từ Cloudinary URL
- * 2. Dùng sharp resize về 50x50 (nhanh, đủ để lấy màu đại diện)
- * 3. Chia ảnh thành các vùng, tính màu trung bình mỗi vùng
- * 4. Trả về mảng tối đa 5 màu HEX
- */
 
 import sharp from 'sharp'
 
-/**
- * Chuyển giá trị RGB sang chuỗi HEX
- */
+
 const rgbToHex = (r, g, b) => {
   return '#' + [r, g, b].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('').toUpperCase()
 }
 
 /**
- * Trích xuất màu chủ đạo từ URL ảnh
+
  * @param {string} imageUrl - URL công khai của ảnh trên Cloudinary
  * @param {number} colorCount - Số lượng màu muốn lấy (mặc định 5)
  * @returns {Promise<string[]>} Mảng mã HEX
