@@ -1,22 +1,10 @@
-/**
- * uploadController.js
- * Chức năng: Xử lý upload ảnh tác phẩm lên Cloudinary và lưu vào MongoDB
- * - Nhận file từ Multer (đã upload lên Cloudinary qua uploadMiddleware)
- * - Trích xuất mảng màu HEX tự động từ ảnh
- * - Tạo bản ghi Portfolio mới trong DB
- *
- * Task 4.1 - Thành viên 4
- */
+
 
 import { Portfolio } from '../models/portfolioModel.js'
 import { cloudinary } from '../middlewares/uploadMiddleware.js'
 import { extractColorsFromUrl } from '../utils/colorExtractor.js'
 
-/**
- * POST /api/portfolios
- * Tạo tác phẩm mới kèm upload ảnh
- * Body: FormData với fields: title, description, category, tags, image (File)
- */
+
 export const createPortfolio = async (req, res) => {
   try {
     // Multer + Cloudinary đã xử lý upload, thông tin ảnh nằm trong req.file
@@ -107,51 +95,3 @@ export const deletePortfolio = async (req, res) => {
   }
 }
 
-/**
- * POST /api/portfolios/:id/like
- * Toggle like/unlike tác phẩm + phát Socket.io thông báo
- */
-export const toggleLike = async (req, res) => {
-  try {
-    const portfolio = await Portfolio.findById(req.params.id).populate('user', '_id')
-
-    if (!portfolio) {
-      return res.status(404).json({ status: 'error', message: 'Không tìm thấy tác phẩm' })
-    }
-
-    const userId = req.user.id
-    const isLiked = portfolio.likes.some((id) => id.toString() === userId)
-
-    if (isLiked) {
-      // Bỏ thích
-      portfolio.likes = portfolio.likes.filter((id) => id.toString() !== userId)
-    } else {
-      // Thích
-      portfolio.likes.push(userId)
-    }
-
-    await portfolio.save()
-
-    // Phát Socket.io thông báo đến người sở hữu tác phẩm (Task 4.2)
-    if (!isLiked && portfolio.user._id.toString() !== userId) {
-      const io = req.app.get('io')
-      if (io) {
-        io.to(`user_${portfolio.user._id}`).emit('send_notification', {
-          type: 'like',
-          senderName: req.user.name || 'Ai đó',
-          portfolioTitle: portfolio.title,
-          portfolioId: portfolio._id
-        })
-      }
-    }
-
-    return res.status(200).json({
-      status: 'success',
-      likesCount: portfolio.likes.length,
-      isLiked: !isLiked
-    })
-  } catch (error) {
-    console.error('toggleLike error:', error)
-    return res.status(500).json({ status: 'error', message: 'Lỗi server' })
-  }
-}
