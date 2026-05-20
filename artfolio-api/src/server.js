@@ -3,6 +3,7 @@ import cors from 'cors'
 import cookieParser from 'cookie-parser'
 import { env } from './config/environment.js'
 import { connectDatabase } from './config/mongodb.js'
+import { errorHandlingMiddleware } from './middlewares/errorHandlingMiddleware.js'
 import { mapOrder } from './utils/sorts.js'
 
 
@@ -31,6 +32,9 @@ const startServer = async () => {
 
   // Đợi kết nối MongoDB Atlas thành công rồi mới khởi chạy Server Express
   await connectDatabase()
+
+  // Middleware xử lý lỗi tập trung (Luôn đặt ở dưới cùng của hàng đợi middleware)
+  app.use(errorHandlingMiddleware)
 
   app.listen(env.APP_PORT, env.APP_HOST, () => {
     console.log(`Hello, ArtFolio Server is running at http://${env.APP_HOST}:${env.APP_PORT}/`)
