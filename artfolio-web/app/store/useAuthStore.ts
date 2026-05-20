@@ -1,10 +1,15 @@
 "use client";
 
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
 import type { AuthUser } from "../types/api";
 
-// Danh sách user mẫu để demo (giả lập database)
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+
+const DEMO_ACCESS_TOKEN_PREFIX = "demo-access-token";
+
+// Danh sách user mẫu để demo khi backend chưa hoàn thiện
 const DEMO_USERS: (AuthUser & { password: string; portfolioIds: string[] })[] = [
   {
     id: "u1",
@@ -35,71 +40,427 @@ const DEMO_USERS: (AuthUser & { password: string; portfolioIds: string[] })[] = 
   },
 ];
 
+type SignupPayload = {
+  name: string;
+  email: string;
+  password: string;
+};
+
+type AuthApiResponse = {
+  accessToken?: string;
+  token?: string;
+  user?: AuthUser;
+  data?: {
+    accessToken?: string;
+    token?: string;
+    user?: AuthUser;
+  };
+  message?: string;
+};
+
 type AuthState = {
+  // Giữ nguyên state cũ để không phá phần TV1
   user: AuthUser | null;
   isAuthenticated: boolean;
+
+  // Bổ sung cho token management
+  accessToken: string | null;
+  isHydrated: boolean;
+  isLoading: boolean;
+
+  // Giữ nguyên chữ ký hàm cũ của TV1
   login: (email: string, password: string) => Promise<void>;
-  signup: (payload: { name: string; email: string; password: string }) => Promise<void>;
+  signup: (payload: SignupPayload) => Promise<void>;
   logout: () => void;
+
+  // Bổ sung action mới cho TV2
+  setHydrated: (value: boolean) => void;
+  setAccessToken: (accessToken: string | null) => void;
+  setAuth: (user: AuthUser, accessToken: string) => void;
+  clearAuth: () => void;
+  refreshAccessToken: () => Promise<string | null>;
+  fetchMe: () => Promise<AuthUser | null>;
 };
+
+function extractAccessToken(data: AuthApiResponse | null): string | null {
+  if (!data) return null;
+
+  return (
+    data.accessToken ||
+    data.token ||
+    data.data?.accessToken ||
+    data.data?.token ||
+    null
+  );
+}
+
+function extractUser(data: AuthApiResponse | null): AuthUser | null {
+  if (!data) return null;
+
+  return data.user || data.data?.user || null;
+}
+
+async function safeJson(response: Response): Promise<AuthApiResponse | null> {
+  try {
+    return (await response.json()) as AuthApiResponse;
+  } catch {
+    return null;
+  }
+}
+
+function findDemoUser(email: string, password: string) {
+  return DEMO_USERS.find(
+    (user) =>
+      user.email.toLowerCase() === email.toLowerCase() &&
+      user.password === password
+  );
+}
+
+function createDemoAccessToken(userId: string) {
+  return `${DEMO_ACCESS_TOKEN_PREFIX}-${userId}-${Date.now()}`;
+}
+
+function isDemoAccessToken(accessToken: string | null) {
+  return Boolean(accessToken?.startsWith(DEMO_ACCESS_TOKEN_PREFIX));
+}
+
+function removeSensitiveDemoFields(
+  user: AuthUser & { password: string; portfolioIds: string[] }
+): AuthUser {
+  const { password: _password, portfolioIds: _portfolioIds, ...safeUser } =
+    user;
+
+  return safeUser;
+}
+
+async function requestBackendLogin(email: string, password: string) {
+  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ email, password }),
+  });
+
+  const data = await safeJson(response);
+
+  if (!response.ok) {
+    throw new Error(data?.message || "Đăng nhập thất bại.");
+  }
+
+  return data;
+}
+
+async function requestBackendSignup(payload: SignupPayload) {
+  const response = await fetch(`${API_BASE_URL}/api/auth/signup`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await safeJson(response);
+
+  if (!response.ok) {
+    throw new Error(data?.message || "Đăng ký thất bại.");
+  }
+
+  return data;
+}
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       isAuthenticated: false,
 
+      accessToken: null,
+      isHydrated: false,
+      isLoading: false,
+
+      setHydrated: (value) => {
+        set({ isHydrated: value });
+      },
+
+      setAccessToken: (accessToken) => {
+        set({
+          accessToken,
+          isAuthenticated: Boolean(accessToken || get().user),
+        });
+      },
+
+      setAuth: (user, accessToken) => {
+        set({
+          user,
+          accessToken,
+          isAuthenticated: true,
+        });
+      },
+
+      clearAuth: () => {
+        set({
+          user: null,
+          accessToken: null,
+          isAuthenticated: false,
+        });
+      },
+
       login: async (email, password) => {
-        // Giả lập network delay
-        await new Promise((r) => setTimeout(r, 400));
+        set({ isLoading: true });
 
-        const found = DEMO_USERS.find(
-          (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password,
-        );
+        try {
+          // Ưu tiên gọi backend thật nếu đã có
+          const data = await requestBackendLogin(email, password);
 
-        if (!found) {
-          throw new Error("Email hoặc mật khẩu không đúng.");
+          const accessToken = extractAccessToken(data);
+          const user = extractUser(data);
+
+          if (!accessToken || !user) {
+            throw new Error(
+              "API login chưa trả về đủ user hoặc accessToken."
+            );
+          }
+
+          set({
+            user,
+            accessToken,
+            isAuthenticated: true,
+          });
+        } catch (error) {
+          // Nếu backend chưa chạy thì fallback sang demo user,
+          // giúp phần login/signup của TV1 vẫn demo được.
+          const demoUser = findDemoUser(email, password);
+
+          if (!demoUser) {
+            throw error instanceof Error
+              ? error
+              : new Error("Email hoặc mật khẩu không đúng.");
+          }
+
+          const safeUser = removeSensitiveDemoFields(demoUser);
+
+          set({
+            user: safeUser,
+            accessToken: createDemoAccessToken(safeUser.id),
+            isAuthenticated: true,
+          });
+        } finally {
+          set({ isLoading: false });
         }
-
-        const { password: _pw, portfolioIds: _ids, ...user } = found;
-        set({ user, isAuthenticated: true });
       },
 
-      signup: async ({ name, email, password }) => {
-        await new Promise((r) => setTimeout(r, 400));
+      signup: async (payload) => {
+        set({ isLoading: true });
 
-        const exists = DEMO_USERS.some(
-          (u) => u.email.toLowerCase() === email.toLowerCase(),
-        );
+        try {
+          // Ưu tiên gọi backend thật nếu đã có
+          const data = await requestBackendSignup(payload);
 
-        if (exists) {
-          throw new Error("Email này đã được đăng ký.");
+          const accessToken = extractAccessToken(data);
+          const user = extractUser(data);
+
+          if (accessToken && user) {
+            set({
+              user,
+              accessToken,
+              isAuthenticated: true,
+            });
+          }
+        } catch (error) {
+          // Nếu backend chưa chạy thì vẫn cho demo signup bằng local state.
+          const existedDemoUser = DEMO_USERS.some(
+            (user) =>
+              user.email.toLowerCase() === payload.email.toLowerCase()
+          );
+
+          if (existedDemoUser) {
+            throw new Error("Email này đã được đăng ký.");
+          }
+
+          const newUser: AuthUser = {
+            id: `u${Date.now()}`,
+            name: payload.name,
+            email: payload.email,
+            role: "user",
+          };
+
+          set({
+            user: newUser,
+            accessToken: createDemoAccessToken(newUser.id),
+            isAuthenticated: true,
+          });
+
+          if (error instanceof Error) {
+            console.warn(
+              "Backend signup chưa sẵn sàng, đang dùng mock signup:",
+              error.message
+            );
+          }
+        } finally {
+          set({ isLoading: false });
         }
-
-        // Tạo user mới (chỉ tồn tại trong session vì demo)
-        const newUser: AuthUser = {
-          id: `u${Date.now()}`,
-          name,
-          email,
-          role: "user",
-        };
-        set({ user: newUser, isAuthenticated: true });
       },
 
-      logout: () => set({ user: null, isAuthenticated: false }),
+      logout: () => {
+        set({
+          user: null,
+          accessToken: null,
+          isAuthenticated: false,
+        });
+      },
+
+      refreshAccessToken: async () => {
+        const currentToken = get().accessToken;
+
+        // Demo token không cần refresh từ backend
+        if (isDemoAccessToken(currentToken)) {
+          return currentToken;
+        }
+
+        try {
+          const response = await fetch(
+            `${API_BASE_URL}/api/auth/refresh-token`,
+            {
+              method: "POST",
+              credentials: "include",
+              headers: {
+                Accept: "application/json",
+              },
+            }
+          );
+
+          const data = await safeJson(response);
+
+          if (!response.ok) {
+            get().clearAuth();
+            return null;
+          }
+
+          const newAccessToken = extractAccessToken(data);
+
+          if (!newAccessToken) {
+            get().clearAuth();
+            return null;
+          }
+
+          set({
+            accessToken: newAccessToken,
+            isAuthenticated: true,
+          });
+
+          return newAccessToken;
+        } catch {
+          get().clearAuth();
+          return null;
+        }
+      },
+
+      fetchMe: async () => {
+        const currentUser = get().user;
+        let currentToken = get().accessToken;
+
+        // Nếu đang dùng demo token thì trả user hiện tại,
+        // không gọi backend để tránh lỗi khi backend chưa hoàn thiện.
+        if (isDemoAccessToken(currentToken)) {
+          return currentUser;
+        }
+
+        if (!currentToken) {
+          currentToken = await get().refreshAccessToken();
+        }
+
+        if (!currentToken) {
+          return null;
+        }
+
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+            method: "GET",
+            credentials: "include",
+            headers: {
+              Authorization: `Bearer ${currentToken}`,
+              Accept: "application/json",
+            },
+          });
+
+          const data = await safeJson(response);
+
+          if (response.status === 401) {
+            const newToken = await get().refreshAccessToken();
+
+            if (!newToken) {
+              get().clearAuth();
+              return null;
+            }
+
+            const retryResponse = await fetch(`${API_BASE_URL}/api/auth/me`, {
+              method: "GET",
+              credentials: "include",
+              headers: {
+                Authorization: `Bearer ${newToken}`,
+                Accept: "application/json",
+              },
+            });
+
+            const retryData = await safeJson(retryResponse);
+
+            if (!retryResponse.ok) {
+              get().clearAuth();
+              return null;
+            }
+
+            const retryUser = extractUser(retryData);
+
+            if (retryUser) {
+              set({
+                user: retryUser,
+                isAuthenticated: true,
+              });
+            }
+
+            return retryUser;
+          }
+
+          if (!response.ok) {
+            return null;
+          }
+
+          const user = extractUser(data);
+
+          if (user) {
+            set({
+              user,
+              isAuthenticated: true,
+            });
+          }
+
+          return user;
+        } catch {
+          return null;
+        }
+      },
     }),
     {
       name: "artfolio-auth",
-      // Chỉ lưu user và isAuthenticated, không lưu các hàm
+      storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         user: state.user,
+        accessToken: state.accessToken,
         isAuthenticated: state.isAuthenticated,
       }),
-    },
-  ),
+      onRehydrateStorage: () => (state) => {
+        state?.setHydrated(true);
+      },
+    }
+  )
 );
 
-// Helper lấy portfolioIds của user demo (để dashboard dùng)
+// Helper lấy portfolioIds của user demo để dashboard dùng
 export function getDemoPortfolioIds(userId: string): string[] {
-  return DEMO_USERS.find((u) => u.id === userId)?.portfolioIds ?? [];
+  return DEMO_USERS.find((user) => user.id === userId)?.portfolioIds ?? [];
 }
