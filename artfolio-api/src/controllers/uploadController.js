@@ -59,10 +59,7 @@ export const createPortfolio = async (req, res) => {
   }
 }
 
-/**
- * DELETE /api/portfolios/:id
- * Xóa tác phẩm: xóa ảnh trên Cloudinary + xóa record trong DB
- */
+
 export const deletePortfolio = async (req, res) => {
   try {
     const portfolio = await Portfolio.findById(req.params.id)
@@ -84,8 +81,7 @@ export const deletePortfolio = async (req, res) => {
     // Xóa portfolio và các comment liên quan
     await Promise.all([
       portfolio.deleteOne(),
-      // TV3 sẽ handle cascade comment khi xóa portfolio
-      // Comment.deleteMany({ portfolio: portfolio._id })
+
     ])
 
     return res.status(200).json({ status: 'success', message: 'Đã xóa tác phẩm thành công' })
