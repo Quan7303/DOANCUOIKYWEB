@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
-import { User } from '~/models/userModel.js'
+import User from '~/models/userModel.js'
 import { env } from '~/config/environment.js'
 import { ApiError } from '~/utils/ApiError.js'
 
