@@ -38,7 +38,7 @@ export const createValidation = async (req, res, next) => {
         })
       })
     }
-    
+
     const errorMessage = error.details.map(err => err.message).join(', ')
     next(new ApiError(422, errorMessage))
   }

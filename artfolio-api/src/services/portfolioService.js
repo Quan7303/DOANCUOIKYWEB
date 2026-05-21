@@ -6,6 +6,23 @@ import { cloudinary } from '~/middlewares/uploadMiddleware.js'
 import { extractColorsFromUrl } from '~/utils/colorExtractor.js'
 import { ApiError } from '~/utils/ApiError.js'
 
+// Hàm trích xuất publicId từ URL Cloudinary
+const getPublicIdFromUrl = (url) => {
+  if (!url || !url.includes('/image/upload/')) return null
+  const parts = url.split('/image/upload/')
+  if (parts.length < 2) return null
+  const pathParts = parts[1].split('/')
+  if (pathParts[0].startsWith('v') && /^\d+$/.test(pathParts[0].substring(1))) {
+    pathParts.shift()
+  }
+  const pathWithoutVersion = pathParts.join('/')
+  const extensionIndex = pathWithoutVersion.lastIndexOf('.')
+  if (extensionIndex !== -1) {
+    return pathWithoutVersion.substring(0, extensionIndex)
+  }
+  return pathWithoutVersion
+}
+
 const createPortfolio = async (reqBody, file, user) => {
   if (!file) {
     throw new ApiError(400, 'Vui lòng chọn ảnh để tải lên')
@@ -20,7 +37,7 @@ const createPortfolio = async (reqBody, file, user) => {
     description: description || '',
     category: category || 'other',
     tags: tags ? (Array.isArray(tags) ? tags : tags.split(',').map((t) => t.trim()).filter(Boolean)) : [],
-    images: [{ url: file.path, publicId: file.filename }],
+    images: [file.path],
     colors,
     user: user._id
   })
@@ -155,10 +172,11 @@ const deletePortfolio = async (portfolioId, user) => {
   }
 
   // Xóa ảnh trên Cloudinary
-  for (const image of portfolio.images) {
-    if (image.publicId) {
-      await cloudinary.uploader.destroy(image.publicId).catch((err) => {
-        console.error(`Không thể xóa ảnh ${image.publicId} trên Cloudinary:`, err)
+  for (const imageUrl of portfolio.images) {
+    const publicId = getPublicIdFromUrl(imageUrl)
+    if (publicId) {
+      await cloudinary.uploader.destroy(publicId).catch((err) => {
+        console.error(`Không thể xóa ảnh ${publicId} trên Cloudinary:`, err)
       })
     }
   }
@@ -166,10 +184,35 @@ const deletePortfolio = async (portfolioId, user) => {
   return { message: 'Đã xóa tác phẩm hoàn toàn cùng với các dữ liệu liên đới (Cascade)' }
 }
 
+const toggleLike = async (portfolioId, userId) => {
+  const portfolio = await Portfolio.findById(portfolioId).populate('user', '_id')
+
+  if (!portfolio) {
+    throw new ApiError(404, 'Không tìm thấy tác phẩm')
+  }
+
+  const hasLiked = portfolio.likes.some((id) => id.toString() === userId)
+
+  if (hasLiked) {
+    portfolio.likes = portfolio.likes.filter((id) => id.toString() !== userId)
+  } else {
+    portfolio.likes.push(userId)
+  }
+
+  portfolio.likesCount = portfolio.likes.length
+  await portfolio.save()
+
+  return {
+    portfolio,
+    isLiked: !hasLiked
+  }
+}
+
 export const portfolioService = {
   createPortfolio,
   getPortfolioList,
   getPortfolioDetail,
   updatePortfolio,
-  deletePortfolio
+  deletePortfolio,
+  toggleLike
 }

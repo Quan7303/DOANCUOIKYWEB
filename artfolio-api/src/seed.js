@@ -1,4 +1,3 @@
-import mongoose from 'mongoose'
 import bcrypt from 'bcryptjs'
 import { connectDatabase, closeDatabase } from './config/mongodb.js'
 import User from './models/userModel.js'
@@ -248,7 +247,7 @@ const seedData = async () => {
     await Notification.insertMany([
       {
         recipient: vy._id, // Vy nhận thông báo
-        sender: nam._id,   // Từ Nam
+        sender: nam._id, // Từ Nam
         type: 'comment',
         portfolio: portfolios[0]._id, // Dashboard UI
         isRead: false

@@ -27,7 +27,6 @@ export const extractColorsFromUrl = async (imageUrl, colorCount = 5) => {
       .toBuffer({ resolveWithObject: true })
 
     const { width, height, channels } = info
-    const totalPixels = width * height
 
     // Chia ảnh thành colorCount vùng theo chiều ngang
     const zoneHeight = Math.floor(height / colorCount)
