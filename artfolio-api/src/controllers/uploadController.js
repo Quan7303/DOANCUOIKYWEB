@@ -91,3 +91,46 @@ export const deletePortfolio = async (req, res) => {
   }
 }
 
+export const toggleLike = async (req, res) => {
+  try {
+    const portfolio = await Portfolio.findById(req.params.id).populate('user', '_id')
+
+    if (!portfolio) {
+      return res.status(404).json({ status: 'error', message: 'Không tìm thấy tác phẩm' })
+    }
+
+    const userId = req.user.id
+    const isLiked = portfolio.likes.some((id) => id.toString() === userId)
+
+    if (isLiked) {
+      // Bỏ thích
+      portfolio.likes = portfolio.likes.filter((id) => id.toString() !== userId)
+    } else {
+      // Thích
+      portfolio.likes.push(userId)
+    }
+
+    await portfolio.save()
+
+    if (!isLiked && portfolio.user._id.toString() !== userId) {
+      const io = req.app.get('io')
+      if (io) {
+        io.to(`user_${portfolio.user._id}`).emit('send_notification', {
+          type: 'like',
+          senderName: req.user.name || 'Ai đó',
+          portfolioTitle: portfolio.title,
+          portfolioId: portfolio._id
+        })
+      }
+    }
+
+    return res.status(200).json({
+      status: 'success',
+      likesCount: portfolio.likes.length,
+      isLiked: !isLiked
+    })
+  } catch (error) {
+    console.error('toggleLike error:', error)
+    return res.status(500).json({ status: 'error', message: 'Lỗi server' })
+  }
+}

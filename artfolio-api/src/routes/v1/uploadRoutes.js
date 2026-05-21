@@ -12,4 +12,7 @@ router.post('/', protect, uploadSingle, createPortfolio)
 // DELETE /api/portfolios/:id - Xóa tác phẩm
 router.delete('/:id', protect, deletePortfolio)
 
+// POST /api/portfolios/:id/like - Toggle like/unlike
+router.post('/:id/like', protect, toggleLike)
+
 export default router
