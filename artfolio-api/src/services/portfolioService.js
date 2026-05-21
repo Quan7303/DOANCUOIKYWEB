@@ -99,7 +99,7 @@ const getPortfolioDetail = async (portfolioId) => {
   const portfolio = await Portfolio.findByIdAndUpdate(
     portfolioId,
     { $inc: { views: 1 } },
-    { new: true }
+    { returnDocument: 'after' }
   ).populate('user', 'name avatar portfolioTitle')
 
   if (!portfolio) {

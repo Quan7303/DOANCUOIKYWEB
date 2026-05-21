@@ -15,7 +15,7 @@ const loginLimiter = rateLimit({
 
 Router.post('/signup', signupValidation, authController.signup)
 Router.post('/login', loginLimiter, loginValidation, authController.login)
-Router.delete('/logout', authController.logout)
-Router.get('/refresh-token', authController.refreshToken)
+Router.post('/logout', authController.logout)
+Router.post('/refresh-token', authController.refreshToken)
 
 export const authRoutes = Router
