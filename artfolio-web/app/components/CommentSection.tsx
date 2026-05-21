@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSocket } from "../hooks/useSocket";
 import { useAuthStore } from "../store/useAuthStore";
 import { api } from "../utils/api";
+import StateBlock from "../components/StateBlock";
 
 type CommentItem = {
   id: string;
@@ -224,7 +225,7 @@ export default function CommentSection({ portfolioId }: CommentSectionProps) {
         </span>
       </div>
 
-      <form className="mb-5 flex gap-3" onSubmit={handleSubmit}>
+      <form className="mb-5 grid gap-3 sm:flex" onSubmit={handleSubmit}>
         <input
           className="input flex-1"
           placeholder="Viết bình luận..."
@@ -234,7 +235,7 @@ export default function CommentSection({ portfolioId }: CommentSectionProps) {
 
         <button
           type="submit"
-          className="btn btn-primary"
+          className="btn btn-primary w-full sm:w-auto"
           disabled={isSubmitting}
         >
           {isSubmitting ? "Đang gửi..." : "Gửi"}
@@ -246,12 +247,11 @@ export default function CommentSection({ portfolioId }: CommentSectionProps) {
       {isLoading ? (
         <CommentSkeleton />
       ) : sortedComments.length === 0 ? (
-        <div className="rounded-xl border border-border bg-surface-soft p-5 text-center">
-          <p className="font-semibold">Chưa có bình luận nào.</p>
-          <p className="mt-1 text-sm text-muted">
-            Hãy là người đầu tiên để lại nhận xét cho tác phẩm này.
-          </p>
-        </div>
+        <StateBlock
+          type="empty"
+          title="Chưa có bình luận nào"
+          description="Hãy là người đầu tiên để lại nhận xét cho tác phẩm này."
+        />
       ) : (
         <div className="grid gap-3">
           {sortedComments.map((comment) => (

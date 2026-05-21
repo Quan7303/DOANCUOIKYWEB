@@ -50,8 +50,14 @@ export default function FollowButton({
   const isOwnProfile = user?.id === targetUserId;
 
   useEffect(() => {
-    const followingIds = readFollowingIds();
-    setIsFollowing(followingIds.includes(targetUserId) || initialFollowing);
+    const timerId = window.setTimeout(() => {
+      const followingIds = readFollowingIds();
+      setIsFollowing(followingIds.includes(targetUserId) || initialFollowing);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
   }, [targetUserId, initialFollowing]);
 
   async function callFollowApi() {

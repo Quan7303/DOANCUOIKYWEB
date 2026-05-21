@@ -246,10 +246,10 @@ useEffect(() => {
             </p>
           </div>
 
-          <div className="flex gap-3">
+          <div className="grid gap-3 sm:flex">
             <button
               type="button"
-              className="btn btn-primary text-sm"
+              className="btn btn-primary w-full text-sm sm:w-auto"
               onClick={() => setActiveTab("upload")}
             >
               Đăng tác phẩm
@@ -261,8 +261,8 @@ useEffect(() => {
             {toastMessage}
           </div>
         )}
-        <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
-          <aside className="grid h-fit gap-4">
+        <div className="grid min-w-0 gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
+          <aside className="grid h-fit min-w-0 gap-4">
             <div className="surface grid gap-4 rounded-lg p-5">
               {user.avatar ? (
                 <Image
@@ -328,7 +328,7 @@ useEffect(() => {
             </nav>
           </aside>
 
-          <div className="grid gap-5">
+          <div className="grid min-w-0 gap-5">
             <ProfileHeader
               user={user}
               onEditProfile={() => setActiveTab("profile")}

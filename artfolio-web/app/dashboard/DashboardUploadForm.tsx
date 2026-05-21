@@ -131,7 +131,8 @@ export default function DashboardUploadForm({
         .map((tag) => tag.trim())
         .filter(Boolean);
 
-      const slug = `${createSlug(values.title)}-${Date.now()}`;
+      const imageSlug = createSlug(imageFile.name.replace(/\.[^/.]+$/, ""));
+      const slug = `${createSlug(values.title)}-${imageSlug}-${imageFile.size}`;
 
       const newPortfolio = {
         _id: slug,
@@ -305,14 +306,18 @@ export default function DashboardUploadForm({
           {fileError && <span className="error-text">{fileError}</span>}
         </div>
 
-        <div className="flex flex-wrap gap-3">
-          <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+        <div className="grid gap-3 sm:flex sm:flex-wrap">
+          <button
+            type="submit"
+            className="btn btn-primary w-full sm:w-auto"
+            disabled={isSubmitting}
+          >
             {isSubmitting ? "Đang đăng..." : "Xuất bản tác phẩm"}
           </button>
 
           <button
             type="button"
-            className="btn btn-secondary"
+            className="btn btn-secondary w-full sm:w-auto"
             onClick={() => {
               reset();
               removeImage();

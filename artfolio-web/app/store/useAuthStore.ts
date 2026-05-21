@@ -127,10 +127,13 @@ function isDemoAccessToken(accessToken: string | null) {
 function removeSensitiveDemoFields(
   user: AuthUser & { password: string; portfolioIds: string[] }
 ): AuthUser {
-  const { password: _password, portfolioIds: _portfolioIds, ...safeUser } =
-    user;
-
-  return safeUser;
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    avatar: user.avatar,
+  };
 }
 
 async function requestBackendLogin(email: string, password: string) {

@@ -129,8 +129,14 @@ export default function PortfolioDetailClient({
   const [isFollowing, setIsFollowing] = useState(false);
 
   useEffect(() => {
-    setLocalPortfolios(readLocalPortfolios());
-    setHasLoadedLocalStorage(true);
+    const timerId = window.setTimeout(() => {
+      setLocalPortfolios(readLocalPortfolios());
+      setHasLoadedLocalStorage(true);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
   }, []);
 
   const portfolio = useMemo(() => {
@@ -154,13 +160,19 @@ export default function PortfolioDetailClient({
   useEffect(() => {
     if (!portfolio) return;
 
-    const likedIds = readStringArray(LIKED_PORTFOLIOS_KEY);
-    const followedAuthors = readStringArray(FOLLOWED_AUTHORS_KEY);
-    const likeCounts = readNumberRecord(LIKE_COUNTS_KEY);
+    const timerId = window.setTimeout(() => {
+      const likedIds = readStringArray(LIKED_PORTFOLIOS_KEY);
+      const followedAuthors = readStringArray(FOLLOWED_AUTHORS_KEY);
+      const likeCounts = readNumberRecord(LIKE_COUNTS_KEY);
 
-    setIsLiked(likedIds.includes(portfolioId));
-    setIsFollowing(followedAuthors.includes(authorId));
-    setLikeCount(likeCounts[portfolioId] ?? portfolio.likesCount ?? 0);
+      setIsLiked(likedIds.includes(portfolioId));
+      setIsFollowing(followedAuthors.includes(authorId));
+      setLikeCount(likeCounts[portfolioId] ?? portfolio.likesCount ?? 0);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
   }, [portfolio, portfolioId, authorId]);
 
   function showStatus(message: string) {
@@ -370,9 +382,9 @@ export default function PortfolioDetailClient({
             <div>
               <p className="font-bold">{authorName}</p>
               <p className="text-sm text-muted">
-                {new Date(
-                  portfolio.createdAt || Date.now()
-                ).toLocaleDateString("vi-VN")}
+                {portfolio.createdAt
+                  ? new Date(portfolio.createdAt).toLocaleDateString("vi-VN")
+                  : "Chưa rõ ngày"}
               </p>
             </div>
           </div>

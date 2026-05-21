@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import FollowButton from "./components/FollowButton";
 import UserStats from "./components/UserStats";
+import StateBlock from "../../components/StateBlock";
 import {
   getMockProfileData,
   type ProfilePortfolio,
@@ -269,14 +270,13 @@ export default function ProfileClient({ userId }: ProfileClientProps) {
 
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-background py-10">
+      <main className="min-h-screen bg-background py-8 sm:py-12">
         <div className="app-container">
-          <div className="surface rounded-2xl p-8">
-            <p className="font-semibold">Đang tải hồ sơ...</p>
-            <p className="mt-2 text-sm text-muted">
-              Hệ thống đang tải thông tin người dùng và danh sách tác phẩm.
-            </p>
-          </div>
+          <StateBlock
+            type="loading"
+            title="Đang tải hồ sơ..."
+            description="Hệ thống đang tải thông tin người dùng và danh sách tác phẩm."
+          />
         </div>
       </main>
     );
@@ -284,17 +284,17 @@ export default function ProfileClient({ userId }: ProfileClientProps) {
 
   if (!profileState.user) {
     return (
-      <main className="min-h-screen bg-background py-10">
+      <main className="min-h-screen bg-background py-8 sm:py-12">
         <div className="app-container">
-          <div className="surface rounded-2xl p-8 text-center">
-            <h1 className="text-2xl font-bold">Không tìm thấy hồ sơ</h1>
-            <p className="mt-2 text-muted">
-              {errorMessage || "Người dùng không tồn tại hoặc đã bị xóa."}
-            </p>
-            <Link href="/" className="btn btn-primary mt-5">
-              Quay về trang chủ
-            </Link>
-          </div>
+          <StateBlock
+            type="error"
+            title="Không tìm thấy hồ sơ"
+            description={
+              errorMessage || "Người dùng không tồn tại hoặc đã bị xóa."
+            }
+            actionLabel="Quay về trang chủ"
+            actionHref="/"
+          />
         </div>
       </main>
     );
@@ -373,12 +373,11 @@ export default function ProfileClient({ userId }: ProfileClientProps) {
           </div>
 
           {profileState.portfolios.length === 0 ? (
-            <div className="surface rounded-2xl p-8 text-center">
-              <p className="font-semibold">Người dùng chưa có tác phẩm.</p>
-              <p className="mt-2 text-sm text-muted">
-                Khi người dùng đăng portfolio, danh sách sẽ hiển thị tại đây.
-              </p>
-            </div>
+            <StateBlock
+              type="empty"
+              title="Người dùng chưa có tác phẩm"
+              description="Khi người dùng đăng portfolio, danh sách sẽ hiển thị tại đây."
+            />
           ) : (
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {profileState.portfolios.map((portfolio) => (
