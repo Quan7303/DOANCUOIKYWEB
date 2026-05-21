@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { api } from "../../../utils/api";
 import { useAuthStore } from "../../../store/useAuthStore";
 
 type FollowButtonProps = {
@@ -27,12 +28,21 @@ function saveFollowingIds(ids: string[]) {
   localStorage.setItem(FOLLOWING_STORAGE_KEY, JSON.stringify(ids));
 }
 
+function shouldUseMockApi() {
+  return process.env.NEXT_PUBLIC_USE_MOCK_API !== "false";
+}
+
+async function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export default function FollowButton({
   targetUserId,
   initialFollowing = false,
   onFollowerChange,
 }: FollowButtonProps) {
   const { user, isAuthenticated } = useAuthStore();
+
   const [isFollowing, setIsFollowing] = useState(initialFollowing);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -44,7 +54,16 @@ export default function FollowButton({
     setIsFollowing(followingIds.includes(targetUserId) || initialFollowing);
   }, [targetUserId, initialFollowing]);
 
-  async function handleToggleFollow() {
+  async function callFollowApi() {
+    if (shouldUseMockApi()) {
+      await delay(350);
+      return;
+    }
+
+    await api.post(`/api/users/${targetUserId}/follow`);
+  }
+
+  async function handleFollow() {
     setMessage("");
 
     if (!isAuthenticated || !user) {
@@ -57,33 +76,34 @@ export default function FollowButton({
       return;
     }
 
-    const previousState = isFollowing;
-    const nextState = !isFollowing;
-    const delta = nextState ? 1 : -1;
+    const previousFollowing = isFollowing;
+    const nextFollowing = !isFollowing;
+    const followerDelta = nextFollowing ? 1 : -1;
 
-    setIsFollowing(nextState);
-    onFollowerChange?.(delta);
+    // Optimistic update: cập nhật UI ngay khi click
+    setIsFollowing(nextFollowing);
+    onFollowerChange?.(followerDelta);
     setIsLoading(true);
 
     try {
-      // Mock network delay.
-      // Sau này thay bằng:
-      // await api.post(`/api/users/${targetUserId}/follow`);
-      await new Promise((resolve) => setTimeout(resolve, 350));
+      await callFollowApi();
 
       const followingIds = readFollowingIds();
 
-      const nextFollowingIds = nextState
+      const nextFollowingIds = nextFollowing
         ? Array.from(new Set([...followingIds, targetUserId]))
         : followingIds.filter((id) => id !== targetUserId);
 
       saveFollowingIds(nextFollowingIds);
 
-      setMessage(nextState ? "Đã theo dõi người dùng." : "Đã hủy theo dõi.");
+      setMessage(
+        nextFollowing ? "Đã theo dõi người dùng." : "Đã hủy theo dõi."
+      );
     } catch {
-      setIsFollowing(previousState);
-      onFollowerChange?.(-delta);
-      setMessage("Thao tác thất bại. Vui lòng thử lại.");
+      // Rollback nếu API fail
+      setIsFollowing(previousFollowing);
+      onFollowerChange?.(-followerDelta);
+      setMessage("Thao tác thất bại. Đã hoàn tác thay đổi.");
     } finally {
       setIsLoading(false);
     }
@@ -97,7 +117,7 @@ export default function FollowButton({
           isFollowing ? "btn-secondary" : "btn-primary"
         }`}
         disabled={isLoading || isOwnProfile}
-        onClick={handleToggleFollow}
+        onClick={handleFollow}
       >
         {isOwnProfile
           ? "Hồ sơ của bạn"
@@ -108,7 +128,9 @@ export default function FollowButton({
               : "Theo dõi"}
       </button>
 
-      {message && <p className="mt-2 text-center text-sm text-muted">{message}</p>}
+      {message && (
+        <p className="mt-2 text-center text-sm text-muted">{message}</p>
+      )}
     </div>
   );
 }
