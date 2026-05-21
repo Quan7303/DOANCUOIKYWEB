@@ -46,7 +46,7 @@ app.get('/', (req, res) => {
   res.end('<h1>Welcome to ArtFolio API Server!</h1><hr>')
 })
 
-app.use('/v1', APIs_V1)
+  app.use('/api', APIs_V1)
 
 // ================= ERROR HANDLER =================
 app.use(errorHandlingMiddleware)
