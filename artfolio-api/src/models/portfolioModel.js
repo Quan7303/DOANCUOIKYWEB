@@ -2,42 +2,42 @@ import mongoose from 'mongoose'
 
 const portfolioSchema = new mongoose.Schema(
   {
-    user: { 
-      type: mongoose.Schema.Types.ObjectId, 
-      ref: 'User', 
-      required: [true, 'Tác phẩm phải thuộc về một người dùng'] 
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: [true, 'Tác phẩm phải thuộc về một người dùng']
     },
-    title: { 
-      type: String, 
+    title: {
+      type: String,
       required: [true, 'Tiêu đề tác phẩm là bắt buộc'],
       trim: true,
       minlength: [5, 'Tiêu đề phải có ít nhất 5 ký tự']
     },
-    description: { 
-      type: String, 
-      default: '' 
+    description: {
+      type: String,
+      default: ''
     },
-    images: [{ 
+    images: [{
       type: String, // URL ảnh Cloudinary
       required: [true, 'Phải có ít nhất một hình ảnh tác phẩm']
     }],
-    tags: [{ 
+    tags: [{
       type: String // Nhãn tìm kiếm, ví dụ: ["landingpage", "vector", "app"]
     }],
-    colors: [{ 
+    colors: [{
       type: String // Lưu tối đa 3 màu HEX trích xuất từ hình ảnh
     }],
-    category: { 
-      type: String, 
-      enum: ['design', 'art', 'photo', '3d', 'other'], 
+    category: {
+      type: String,
+      enum: ['design', 'art', 'photo', '3d', 'other'],
       required: [true, 'Lĩnh vực tác phẩm là bắt buộc']
     },
-    views: { 
-      type: Number, 
-      default: 0 
+    views: {
+      type: Number,
+      default: 0
     },
-    likes: [{ 
-      type: mongoose.Schema.Types.ObjectId, 
+    likes: [{
+      type: mongoose.Schema.Types.ObjectId,
       ref: 'User' // Mảng lưu các User ID thích tác phẩm này
     }],
     likesCount: {
@@ -45,8 +45,8 @@ const portfolioSchema = new mongoose.Schema(
       default: 0
     }
   },
-  { 
-    timestamps: true 
+  {
+    timestamps: true
   }
 )
 
