@@ -38,7 +38,7 @@ export const loginValidation = async (req, res, next) => {
       'string.empty': 'Email không được phép để trống!',
       'string.email': 'Email không đúng định dạng hợp lệ!'
     }),
-    password: Joi.string().required().min(8).trim().messages({
+    password: Joi.string().required().min(6).trim().messages({
       'any.required': 'Mật khẩu là bắt buộc!',
       'string.empty': 'Mật khẩu không được phép để trống!',
       'string.min': 'Mật khẩu phải có ít nhất {#limit} ký tự!'
