@@ -52,10 +52,41 @@ const deletePortfolio = async (req, res, next) => {
   }
 }
 
+const toggleLike = async (req, res, next) => {
+  try {
+    const userId = req.user._id.toString()
+    const { portfolio, isLiked } = await portfolioService.toggleLike(req.params.id, userId)
+
+    // Chỉ gửi thông báo socket nếu đó là hành động THÍCH (isLiked === true) và người thích không phải chủ tác phẩm
+    if (isLiked && portfolio.user._id.toString() !== userId) {
+      const io = req.app.get('io')
+      if (io) {
+        io.to(`user_${portfolio.user._id}`).emit('send_notification', {
+          type: 'like',
+          senderName: req.user.name || 'Ai đó',
+          portfolioTitle: portfolio.title,
+          portfolioId: portfolio._id
+        })
+      }
+    }
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        likesCount: portfolio.likesCount,
+        isLiked
+      }
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
 export const portfolioController = {
   createPortfolio,
   getPortfolioList,
   getPortfolioDetail,
   updatePortfolio,
-  deletePortfolio
+  deletePortfolio,
+  toggleLike
 }
