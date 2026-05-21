@@ -1,0 +1,100 @@
+name: Frontend CI/CD
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  pull_request:
+    branches:
+      - main
+      - dev
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  build-and-test:
+    name: Build & Test Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./artfolio-web
+
+    strategy:
+      matrix:
+        node-version: [20.x]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: artfolio-web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linter
+        run: npm run lint
+        continue-on-error: false
+
+      - name: Build Next.js
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:5000/api
+          NEXT_PUBLIC_SOCKET_URL: http://localhost:5000
+          NEXT_PUBLIC_USE_MOCK_API: true
+          NEXT_PUBLIC_ENABLE_PWA: true
+
+      - name: Check build artifacts
+        run: |
+          if [ ! -d ".next" ]; then
+            echo "Build failed: .next directory not found"
+            exit 1
+          fi
+          echo "Build successful!"
+
+      - name: Upload build artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextjs-build
+          path: artfolio-web/.next
+          retention-days: 7
+
+  deploy-preview:
+    name: Deploy Preview Status
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    needs: build-and-test
+
+    steps:
+      - name: Comment PR with status
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '✅ Frontend build passed! Ready for Vercel preview deployment.'
+            })
+
+  deploy-production:
+    name: Production Deployment Status
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: build-and-test
+
+    steps:
+      - name: Print deployment note
+        run: |
+          echo "Frontend production build passed."
+          echo "Vercel deployment should be handled by Vercel GitHub integration."

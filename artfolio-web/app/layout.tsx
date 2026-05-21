@@ -20,7 +20,38 @@ export const metadata: Metadata = {
     default: "Artfolio",
     template: "%s | Artfolio",
   },
-  description: "CreativePortfolio frontend for INT1334 with App Router, validated forms, and portfolio PDF export.",
+  description: "Chia sẻ và khám phá tác phẩm từ các designer, artist, photographer và creator tài năng",
+  applicationName: "CreativePortfolio",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Artfolio",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/icons/icon-192.png",
+  },
+  manifest: "/manifest.json",
+  keywords: [
+    "portfolio",
+    "creative",
+    "design",
+    "art",
+    "photo",
+    "3d",
+    "creator",
+    "artfolio",
+  ],
+  authors: [{ name: "Int1334 Team" }],
+  viewport: {
+    width: "device-width",
+    initialScale: 1,
+    maximumScale: 5,
+    userScalable: true,
+  },
 };
 
 export default function RootLayout({
@@ -40,6 +71,11 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `try{var t=localStorage.getItem("artfolio-theme");var d=window.matchMedia("(prefers-color-scheme: dark)").matches;document.documentElement.classList.toggle("dark",t?t==="dark":d)}catch(e){}`,
+          }}
+        />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `if('serviceWorker'in navigator){navigator.serviceWorker.register('/sw.js').catch(()=>{});}`,
           }}
         />
         <ThemeInitializer />

@@ -1,0 +1,80 @@
+{
+  "name": "CreativePortfolio - Nền tảng chia sẻ tác phẩm sáng tạo",
+  "short_name": "Artfolio",
+  "description": "Chia sẻ và khám phá tác phẩm từ các designer, artist, photographer và creator tài năng",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0f172a",
+  "theme_color": "#6366f1",
+  "categories": ["productivity", "social"],
+  "screenshots": [
+    {
+      "src": "/icons/screenshot-1.png",
+      "sizes": "540x720",
+      "type": "image/png",
+      "form_factor": "narrow"
+    },
+    {
+      "src": "/icons/screenshot-2.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide"
+    }
+  ],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192-maskable.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Xem Dashboard",
+      "short_name": "Dashboard",
+      "description": "Quản lý tác phẩm cá nhân",
+      "url": "/dashboard",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Xem Khám phá",
+      "short_name": "Khám phá",
+      "description": "Tìm kiếm tác phẩm từ creator khác",
+      "url": "/portfolios",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ]
+}
