@@ -2,15 +2,37 @@ type UserStatsProps = {
   portfoliosCount: number;
   followersCount: number;
   followingCount: number;
-  totalLikes: number;
+  totalLikes?: number;
+  isLoading?: boolean;
 };
+
+function StatSkeleton() {
+  return (
+    <div className="rounded-xl border border-border bg-surface p-4">
+      <div className="mx-auto h-7 w-16 animate-pulse rounded bg-surface-soft" />
+      <div className="mx-auto mt-2 h-4 w-20 animate-pulse rounded bg-surface-soft" />
+    </div>
+  );
+}
 
 export default function UserStats({
   portfoliosCount,
   followersCount,
   followingCount,
-  totalLikes,
+  totalLikes = 0,
+  isLoading = false,
 }: UserStatsProps) {
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatSkeleton />
+        <StatSkeleton />
+        <StatSkeleton />
+        <StatSkeleton />
+      </div>
+    );
+  }
+
   const stats = [
     {
       label: "Tác phẩm",

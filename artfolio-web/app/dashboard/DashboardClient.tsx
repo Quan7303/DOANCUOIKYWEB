@@ -2,13 +2,13 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import Image from "next/image";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { updateProfileAction } from "../actions/profileActions";
 import ExportPdfButton from "../components/ExportPdfButton";
-import { useAuthStore } from "../store/useAuthStore";
+import ProfileHeader from "./components/ProfileHeader";
+import DashboardStats from "./components/DashboardStats";
+import PortfolioCard from "../components/PortfolioCard";
 import type {
   AuthUser,
   PortfolioDetail,
@@ -112,9 +112,6 @@ export default function DashboardClient({
   user,
   myPortfolios,
 }: DashboardClientProps) {
-  const router = useRouter();
-  const { logout } = useAuthStore();
-
   const [portfolios, setPortfolios] =
     useState<PortfolioDetail[]>(myPortfolios);
 
@@ -188,10 +185,6 @@ useEffect(() => {
     setIsSubmitting(false);
   };
 
-  const handleLogout = () => {
-    logout();
-    router.push("/");
-  };
 
   const handleCreatedPortfolio = (portfolio: PortfolioDetail) => {
     const currentLocalPortfolios = readLocalPortfolios();
@@ -260,14 +253,6 @@ useEffect(() => {
               onClick={() => setActiveTab("upload")}
             >
               Đăng tác phẩm
-            </button>
-
-            <button
-              type="button"
-              className="btn btn-secondary text-sm"
-              onClick={handleLogout}
-            >
-              Đăng xuất
             </button>
           </div>
         </div>
@@ -343,7 +328,19 @@ useEffect(() => {
             </nav>
           </aside>
 
-          <div>
+          <div className="grid gap-5">
+            <ProfileHeader
+              user={user}
+              onEditProfile={() => setActiveTab("profile")}
+            />
+
+            <DashboardStats
+              portfoliosCount={portfolios.length}
+              totalLikes={totalLikes}
+              totalViews={totalViews}
+              role={user.role === "admin" ? "Admin" : "User"}
+            />
+
             {activeTab === "profile" && (
               <div className="surface rounded-lg p-5 sm:p-7">
                 <h2 className="mb-5 text-xl font-bold">Chỉnh sửa hồ sơ</h2>
@@ -497,35 +494,11 @@ useEffect(() => {
                 ) : (
                   <div className="grid gap-4 sm:grid-cols-2">
                     {portfolios.map((portfolio) => (
-                      <Link
-                        key={portfolio._id}
-                        href={`/portfolio/${portfolio._id}`}
-                        className="surface group flex gap-4 rounded-lg p-4 transition hover:-translate-y-0.5"
-                      >
-                        <div className="h-20 w-28 shrink-0 overflow-hidden rounded-md bg-surface-soft">
-                          <img
-                            src={portfolio.images[0]}
-                            alt={portfolio.title}
-                            className="h-full w-full object-cover"
-                          />
-                        </div>
-
-                        <div className="min-w-0">
-                          <h3 className="truncate font-bold group-hover:text-primary">
-                            {portfolio.title}
-                          </h3>
-
-                          <span className="badge mt-1">
-                            {categoryLabels[portfolio.category] ??
-                              portfolio.category}
-                          </span>
-
-                          <p className="mt-2 text-sm text-muted">
-                            ❤ {portfolio.likesCount.toLocaleString("vi-VN")} · 👁{" "}
-                            {portfolio.views.toLocaleString("vi-VN")}
-                          </p>
-                        </div>
-                      </Link>
+                      <PortfolioCard
+                        key={getPortfolioId(portfolio)}
+                        portfolio={portfolio}
+                        compact
+                      />
                     ))}
                   </div>
                 )}
