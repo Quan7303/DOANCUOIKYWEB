@@ -32,21 +32,21 @@ app.use(cookieParser())
 // ================= ROUTES =================
 app.get('/', (req, res) => {
   console.log(
-      mapOrder(
-          [
-            { id: 'id-1', name: 'One' },
-            { id: 'id-2', name: 'Two' },
-            { id: 'id-3', name: 'Three' }
-          ],
-          ['id-3', 'id-1', 'id-2'],
-          'id'
-      )
+    mapOrder(
+      [
+        { id: 'id-1', name: 'One' },
+        { id: 'id-2', name: 'Two' },
+        { id: 'id-3', name: 'Three' }
+      ],
+      ['id-3', 'id-1', 'id-2'],
+      'id'
+    )
   )
 
   res.end('<h1>Welcome to ArtFolio API Server!</h1><hr>')
 })
 
-  app.use('/api', APIs_V1)
+app.use('/api', APIs_V1)
 
 // ================= ERROR HANDLER =================
 app.use(errorHandlingMiddleware)

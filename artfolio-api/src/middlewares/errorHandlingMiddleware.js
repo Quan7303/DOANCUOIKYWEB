@@ -8,7 +8,7 @@ export const errorHandlingMiddleware = (err, req, res, next) => {
   if (err.code === 11000) {
     statusCode = 409
     const field = Object.keys(err.keyValue)[0]
-    message = field === 'email' 
+    message = field === 'email'
       ? 'Email này đã được sử dụng! Vui lòng chọn một email khác.'
       : `Trường dữ liệu '${field}' đã tồn tại và không được phép trùng lặp.`
   }
