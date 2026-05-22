@@ -14,7 +14,8 @@
     "build": "npm run clean && npm run build-babel",
     "production": "npm run build && node ./build/src/server.js",
     "dev": "nodemon --exec babel-node ./src/server.js",
-    "seed": "babel-node src/seed.js"
+    "seed": "babel-node src/seed.js",
+    "test": "vitest"
   },
   "dependencies": {
     "@babel/runtime": "^7.22.10",
@@ -42,6 +43,7 @@
     "@babel/preset-env": "^7.29.5",
     "babel-plugin-module-resolver": "^5.0.0",
     "eslint": "^8.47.0",
-    "nodemon": "^3.0.1"
+    "nodemon": "^3.0.1",
+    "vitest": "^4.1.7"
   }
 }
