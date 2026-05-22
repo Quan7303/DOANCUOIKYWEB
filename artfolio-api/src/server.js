@@ -55,8 +55,8 @@ app.use(errorHandlingMiddleware)
 const startServer = async () => {
   await connectDatabase()
 
-  httpServer.listen(env.APP_PORT, env.APP_HOST, () => {
-    console.log('Server running at http://' + env.APP_HOST + ':' + env.APP_PORT)
+  httpServer.listen(env.APP_PORT, () => {
+    console.log(`Server running at http://localhost:${env.APP_PORT}`)
     console.log('Socket.io initialized')
   })
 }
