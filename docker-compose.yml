@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  # 1. Database MongoDB Local (Tiện lợi khi test offline không dùng Atlas)
+  artfolio-db:
+    image: mongo:latest
+    container_name: artfolio-db
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - artfolio-network
+
+  # 2. Express Backend API
+  artfolio-api:
+    build:
+      context: ./artfolio-api
+      dockerfile: Dockerfile
+    container_name: artfolio-api
+    restart: always
+    ports:
+      - "5000:5000"
+    env_file:
+      - ./artfolio-api/.env
+    environment:
+      - PORT=5000
+      - APP_PORT=5000
+      - APP_HOST=localhost
+      # Để kết nối tới MongoDB local của container, chỉ cần đổi MONGODB_URI thành:
+      # mongodb://artfolio-db:27017/artfolio
+    volumes:
+      - ./artfolio-api:/app
+      - /app/node_modules
+    depends_on:
+      - artfolio-db
+    networks:
+      - artfolio-network
+
+  # 3. Next.js Frontend Web
+  artfolio-web:
+    build:
+      context: ./artfolio-web
+      dockerfile: Dockerfile
+    container_name: artfolio-web
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:5000
+      - NEXT_PUBLIC_SOCKET_URL=http://localhost:5000
+      - NEXT_PUBLIC_USE_MOCK_API=false
+    volumes:
+      - ./artfolio-web:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - artfolio-api
+    networks:
+      - artfolio-network
+
+volumes:
+  mongo_data:
+
+networks:
+  artfolio-network:
+    driver: bridge
