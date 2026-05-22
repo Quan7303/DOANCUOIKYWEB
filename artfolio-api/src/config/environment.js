@@ -6,6 +6,9 @@ export const env = {
   APP_HOST: process.env.APP_HOST || 'localhost',
   APP_PORT: process.env.APP_PORT || 8017,
 
+  EMAIL_USER: process.env.EMAIL_USER,
+  EMAIL_PASS: process.env.EMAIL_PASS,
+
   JWT_SECRET: process.env.JWT_SECRET || 'jwt-default-secret-key-2026',
   JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || 'jwt-refresh-default-secret-key-2026',
 
