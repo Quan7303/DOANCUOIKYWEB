@@ -139,19 +139,46 @@ export default function PortfolioDetailClient({
     };
   }, []);
 
-  const portfolio = useMemo(() => {
-    const allPortfolios = [
-      ...localPortfolios,
-      ...(samplePortfolios as unknown as ExtendedPortfolio[]),
-    ];
+  const [portfolio, setPortfolio] = useState<ExtendedPortfolio | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-    return allPortfolios.find((item) => {
-      const portfolioId = getPortfolioId(item);
-      const slug = item.slug || "";
+  useEffect(() => {
+    if (!hasLoadedLocalStorage) return;
 
-      return portfolioId === id || slug === id;
-    });
-  }, [id, localPortfolios]);
+    async function fetchPortfolio() {
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+        const res = await fetch(`${apiUrl}/portfolios/${id}`);
+        if (res.ok) {
+          const data = await res.json();
+          // Lấy data từ response
+          const fetchedData = data.data || data;
+          setPortfolio(fetchedData);
+          setIsLoading(false);
+          return;
+        }
+      } catch (err) {
+        console.error("Lỗi gọi API, dùng fallback tĩnh:", err);
+      }
+
+      // Fallback local
+      const allPortfolios = [
+        ...localPortfolios,
+        ...(samplePortfolios as unknown as ExtendedPortfolio[]),
+      ];
+
+      const found = allPortfolios.find((item) => {
+        const portfolioId = getPortfolioId(item);
+        const slug = item.slug || "";
+        return portfolioId === id || slug === id;
+      });
+      
+      setPortfolio(found || null);
+      setIsLoading(false);
+    }
+
+    fetchPortfolio();
+  }, [id, hasLoadedLocalStorage, localPortfolios]);
 
   const portfolioId = portfolio ? getPortfolioId(portfolio) : id;
   const authorId = portfolio ? getAuthorId(portfolio) : "";
@@ -256,7 +283,7 @@ export default function PortfolioDetailClient({
     showStatus("Đã bình luận");
   }
 
-  if (!hasLoadedLocalStorage) {
+  if (!hasLoadedLocalStorage || isLoading) {
     return (
       <main className="min-h-screen bg-background py-10">
         <div className="app-container">
