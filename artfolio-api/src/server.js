@@ -3,6 +3,7 @@ import http from 'http'
 import { Server } from 'socket.io'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
+import { initSocket } from './sockets/index.js'
 
 import { env } from './config/environment.js'
 import { connectDatabase } from './config/mongodb.js'
@@ -23,6 +24,9 @@ const io = new Server(httpServer, {
 })
 
 app.set('io', io)
+
+// Khởi tạo xử lý socket events
+initSocket(io)
 
 // ================= MIDDLEWARE =================
 app.use(cors())
