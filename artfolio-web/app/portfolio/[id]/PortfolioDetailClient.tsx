@@ -453,9 +453,7 @@ export default function PortfolioDetailClient({
             {isFollowing ? "Đang theo dõi" : "Theo dõi"}
           </button>
 
-          <button type="button" className="btn btn-primary mt-3 w-full">
-            Xuất PDF
-          </button>
+
         </div>
 
         {colors.length > 0 && (

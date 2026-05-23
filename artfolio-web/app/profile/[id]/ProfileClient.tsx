@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import FollowButton from "./components/FollowButton";
 import UserStats from "./components/UserStats";
 import StateBlock from "../../components/StateBlock";
+import ExportPdfButton from "../../components/ExportPdfButton";
 import {
   getMockProfileData,
   type ProfilePortfolio,
@@ -329,11 +330,26 @@ export default function ProfileClient({ userId }: ProfileClientProps) {
                 </div>
               </div>
 
-              <div className="w-full md:w-56">
-                <FollowButton
-                  targetUserId={user.id}
-                  onFollowerChange={handleFollowerChange}
-                />
+              <div className="flex w-full flex-col gap-3 md:w-auto md:flex-row">
+                <div className="w-full md:w-48">
+                  <FollowButton
+                    targetUserId={user.id}
+                    onFollowerChange={handleFollowerChange}
+                  />
+                </div>
+                <div className="w-full md:w-48">
+                  <ExportPdfButton
+                    profile={{
+                      name: user.name,
+                      title: user.bio || "Thành viên Artfolio",
+                      email: user.email,
+                      skills: user.skills,
+                      experience: [],
+                      socialLinks: [],
+                      works: profileState.portfolios,
+                    }}
+                  />
+                </div>
               </div>
             </div>
 
