@@ -172,6 +172,23 @@ export const portfolios: PortfolioDetail[] = [
 ];
 
 export async function getFeaturedPortfolios(): Promise<PortfolioSummary[]> {
+  try {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+    const res = await fetch(`${apiUrl}/portfolios?page=1&limit=8`, {
+      next: { revalidate: 3600 },
+    });
+    
+    if (res.ok) {
+      const json = await res.json();
+      if (json.status === "success" && json.data) {
+        return json.data;
+      }
+    }
+  } catch (err) {
+    console.error("Failed to fetch portfolios from API, falling back to mock data:", err);
+  }
+
+  // Fallback
   return portfolios.map((portfolio) => ({
     _id: portfolio._id,
     title: portfolio.title,
