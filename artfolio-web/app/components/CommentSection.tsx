@@ -26,10 +26,6 @@ type CommentSectionProps = {
 
 const COMMENT_STORAGE_KEY = "artfolio-comments";
 
-function shouldUseMockApi() {
-  return process.env.NEXT_PUBLIC_USE_MOCK_API !== "false";
-}
-
 function readLocalComments(portfolioId: string): CommentItem[] {
   if (typeof window === "undefined") return [];
 
@@ -99,23 +95,15 @@ export default function CommentSection({ portfolioId }: CommentSectionProps) {
       setIsLoading(true);
 
       try {
-        if (shouldUseMockApi()) {
-          await new Promise((resolve) => setTimeout(resolve, 350));
-
-          if (!isMounted) return;
-
-          setComments(readLocalComments(portfolioId));
-          return;
-        }
-
         const response = await api.get(`/api/comments/portfolio/${portfolioId}`);
         const data = response.data?.data?.comments || response.data?.comments || [];
 
         if (!isMounted) return;
 
         setComments(data);
-      } catch {
+      } catch (error) {
         if (!isMounted) return;
+        console.error("Failed to load comments:", error);
         setComments(readLocalComments(portfolioId));
       } finally {
         if (isMounted) {
@@ -188,15 +176,10 @@ export default function CommentSection({ portfolioId }: CommentSectionProps) {
     setIsSubmitting(true);
 
     try {
-      if (shouldUseMockApi()) {
-        await new Promise((resolve) => setTimeout(resolve, 350));
-        saveLocalComment(optimisticComment);
-      } else {
-        await api.post("/api/comments", {
-          portfolioId,
-          content: trimmedContent,
-        });
-      }
+      await api.post("/api/comments", {
+        portfolioId,
+        content: trimmedContent,
+      });
 
       socket?.emit("create_comment", optimisticComment);
       setMessage("Đã bình luận.");
