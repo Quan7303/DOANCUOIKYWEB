@@ -309,12 +309,24 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      logout: () => {
-        set({
-          user: null,
-          accessToken: null,
-          isAuthenticated: false,
-        });
+      logout: async () => {
+        try {
+          await fetch(`${API_BASE_URL}/api/auth/logout`, {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              Accept: "application/json",
+            },
+          });
+        } catch (error) {
+          console.error("Logout API error:", error);
+        } finally {
+          set({
+            user: null,
+            accessToken: null,
+            isAuthenticated: false,
+          });
+        }
       },
 
       refreshAccessToken: async () => {

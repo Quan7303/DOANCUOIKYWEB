@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import type { AuthUser, PortfolioDetail } from "../types/api";
+import { api } from "../utils/api";
 
 const uploadSchema = z.object({
   title: z.string().min(5, "Tiêu đề phải có ít nhất 5 ký tự"),
@@ -23,34 +24,8 @@ type DashboardUploadFormProps = {
   onCreated: (portfolio: PortfolioDetail) => void;
 };
 
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-
-    reader.onload = () => {
-      resolve(reader.result as string);
-    };
-
-    reader.onerror = () => {
-      reject(new Error("Không đọc được file ảnh"));
-    };
-
-    reader.readAsDataURL(file);
-  });
-}
-
 function formatFileSize(size: number) {
   return `${(size / 1024 / 1024).toFixed(2)} MB`;
-}
-
-function createSlug(value: string) {
-  return value
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "d")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
 }
 
 export default function DashboardUploadForm({
@@ -124,49 +99,41 @@ export default function DashboardUploadForm({
     setIsSubmitting(true);
 
     try {
-      const imageUrl = await fileToDataUrl(imageFile);
-
       const tagList = values.tags
         .split(",")
         .map((tag) => tag.trim())
         .filter(Boolean);
 
-      const imageSlug = createSlug(imageFile.name.replace(/\.[^/.]+$/, ""));
-      const slug = `${createSlug(values.title)}-${imageSlug}-${imageFile.size}`;
+      // Create FormData for backend upload
+      const formData = new FormData();
+      formData.append("title", values.title);
+      formData.append("description", values.description);
+      formData.append("category", values.category);
+      tagList.forEach((tag) => formData.append("tags", tag));
+      formData.append("image", imageFile);
 
-      const newPortfolio = {
-        _id: slug,
-        id: slug,
-        slug,
-        title: values.title,
-        description: values.description,
-        category: values.category,
-        tags: tagList,
-        colors: ["#6366f1", "#ec4899", "#0f172a"],
-        images: [imageUrl],
-        likesCount: 0,
-        views: 0,
-        author: {
-          id: user.id,
-          name: user.name,
-          avatar: user.avatar,
+      // Call backend API to upload portfolio
+      const response = await api.post("/api/portfolios", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
         },
-        user: {
-          id: user.id,
-          name: user.name,
-          avatar: user.avatar,
-        },
-        comments: [],
-        createdAt: new Date().toISOString(),
-      } as unknown as PortfolioDetail;
+      });
 
-      onCreated(newPortfolio);
+      const newPortfolio =
+        response.data?.data?.portfolio ||
+        response.data?.data ||
+        response.data?.portfolio ||
+        response.data;
+
+      onCreated(newPortfolio as PortfolioDetail);
 
       reset();
       removeImage();
       setSubmitMessage("Đăng tác phẩm thành công.");
-    } catch {
-      setSubmitMessage("Đăng tác phẩm thất bại. Vui lòng thử lại.");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Đăng tác phẩm thất bại";
+      setSubmitMessage(message);
     } finally {
       setIsSubmitting(false);
     }

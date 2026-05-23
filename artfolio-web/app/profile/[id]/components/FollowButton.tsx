@@ -28,14 +28,6 @@ function saveFollowingIds(ids: string[]) {
   localStorage.setItem(FOLLOWING_STORAGE_KEY, JSON.stringify(ids));
 }
 
-function shouldUseMockApi() {
-  return process.env.NEXT_PUBLIC_USE_MOCK_API !== "false";
-}
-
-async function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 export default function FollowButton({
   targetUserId,
   initialFollowing = false,
@@ -61,11 +53,6 @@ export default function FollowButton({
   }, [targetUserId, initialFollowing]);
 
   async function callFollowApi() {
-    if (shouldUseMockApi()) {
-      await delay(350);
-      return;
-    }
-
     await api.post(`/api/users/${targetUserId}/follow`);
   }
 
