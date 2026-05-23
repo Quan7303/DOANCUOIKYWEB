@@ -1,218 +1,99 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { MapPin, Mail, LayoutGrid, Heart as HeartIcon, Info } from "lucide-react";
 import FollowButton from "./components/FollowButton";
 import UserStats from "./components/UserStats";
 import StateBlock from "../../components/StateBlock";
 import ExportPdfButton from "../../components/ExportPdfButton";
-import {
-  getMockProfileData,
-  type ProfilePortfolio,
-  type ProfileUser,
-} from "./profileMockData";
+import { useAuthStore } from "../../../store/useAuthStore";
 
 type ProfileClientProps = {
   userId: string;
 };
 
-type ProfileState = {
-  user: ProfileUser | null;
-  portfolios: ProfilePortfolio[];
+// Kiểu dữ liệu khớp với MongoDB
+type MongoUser = {
+  _id: string;
+  name: string;
+  email: string;
+  avatar?: string;
+  bio?: string;
+  location?: string;
+  skills?: string[];
+  followersCount: number;
+  followingCount: number;
 };
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+type MongoPortfolio = {
+  _id: string;
+  title: string;
+  description?: string;
+  images: string[];
+  category: string;
+  tags?: string[];
+  likesCount: number;
+  commentsCount?: number;
+  views: number;
+  createdAt: string;
+};
 
-const LOCAL_PORTFOLIOS_KEY = "artfolio-local-portfolios";
-
-function extractUser(data: unknown): ProfileUser | null {
-  const value = data as {
-    user?: ProfileUser;
-    data?: {
-      user?: ProfileUser;
-    };
-  };
-
-  return value.user || value.data?.user || null;
-}
-
-function extractPortfolios(data: unknown, userId: string): ProfilePortfolio[] {
-  const value = data as {
-    portfolios?: unknown[];
-    data?: {
-      portfolios?: unknown[];
-    };
-  };
-
-  const rawItems = value.portfolios || value.data?.portfolios || [];
-
-  return rawItems.map((item) => {
-    const portfolio = item as {
-      _id?: string;
-      id?: string;
-      slug?: string;
-      title?: string;
-      description?: string;
-      images?: string[];
-      image?: string;
-      category?: ProfilePortfolio["category"];
-      tags?: string[];
-      likesCount?: number;
-      commentsCount?: number;
-      comments?: unknown[];
-      createdAt?: string;
-      user?: {
-        _id?: string;
-        id?: string;
-      };
-    };
-
-    const id = portfolio._id || portfolio.id || portfolio.slug || "";
-
-    return {
-      id,
-      slug: portfolio.slug || id,
-      title: portfolio.title || "Untitled Portfolio",
-      description: portfolio.description || "",
-      image: portfolio.image || portfolio.images?.[0] || "/next.svg",
-      category: portfolio.category || "other",
-      tags: portfolio.tags || [],
-      likesCount: portfolio.likesCount || 0,
-      commentsCount: portfolio.commentsCount || portfolio.comments?.length || 0,
-      userId: portfolio.user?._id || portfolio.user?.id || userId,
-      createdAt: portfolio.createdAt || new Date().toISOString(),
-    };
-  });
-}
-
-function readLocalUploadedPortfolios(userId: string): ProfilePortfolio[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = localStorage.getItem(LOCAL_PORTFOLIOS_KEY);
-    const items = raw ? (JSON.parse(raw) as unknown[]) : [];
-
-    return items
-      .filter((item) => {
-        const portfolio = item as {
-          user?: {
-            id?: string;
-            _id?: string;
-          };
-          author?: {
-            id?: string;
-            _id?: string;
-          };
-        };
-
-        const ownerId =
-          portfolio.user?.id ||
-          portfolio.user?._id ||
-          portfolio.author?.id ||
-          portfolio.author?._id;
-
-        return ownerId === userId;
-      })
-      .map((item) => {
-        const portfolio = item as {
-          _id?: string;
-          id?: string;
-          slug?: string;
-          title?: string;
-          description?: string;
-          images?: string[];
-          image?: string;
-          category?: ProfilePortfolio["category"];
-          tags?: string[];
-          likesCount?: number;
-          commentsCount?: number;
-          comments?: unknown[];
-          createdAt?: string;
-        };
-
-        const id = portfolio._id || portfolio.id || portfolio.slug || "";
-
-        return {
-          id,
-          slug: portfolio.slug || id,
-          title: portfolio.title || "Untitled Portfolio",
-          description: portfolio.description || "",
-          image: portfolio.image || portfolio.images?.[0] || "/next.svg",
-          category: portfolio.category || "other",
-          tags: portfolio.tags || [],
-          likesCount: portfolio.likesCount || 0,
-          commentsCount:
-            portfolio.commentsCount || portfolio.comments?.length || 0,
-          userId,
-          createdAt: portfolio.createdAt || new Date().toISOString(),
-        };
-      });
-  } catch {
-    return [];
-  }
-}
-
-function mergePortfolios(items: ProfilePortfolio[]) {
-  const existed = new Set<string>();
-
-  return items.filter((item) => {
-    const key = item.id || item.slug;
-
-    if (existed.has(key)) {
-      return false;
-    }
-
-    existed.add(key);
-    return true;
-  });
-}
+type ProfileState = {
+  user: MongoUser | null;
+  portfolios: MongoPortfolio[];
+};
 
 async function loadProfileData(userId: string): Promise<ProfileState> {
-  const fallbackData = getMockProfileData(userId);
-
   try {
-    const [userResponse, portfoliosResponse] = await Promise.all([
-      fetch(`${API_BASE_URL}/api/users/${userId}`, {
-        cache: "no-store",
-      }),
-      fetch(`${API_BASE_URL}/api/portfolios?user=${userId}`, {
-        cache: "no-store",
-      }),
-    ]);
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+    
+    const response = await fetch(`${apiUrl}/users/${userId}`, {
+      cache: "no-store",
+    });
 
-    if (!userResponse.ok || !portfoliosResponse.ok) {
-      return fallbackData;
+    if (!response.ok) {
+      return { user: null, portfolios: [] };
     }
 
-    const [userData, portfoliosData] = await Promise.all([
-      userResponse.json(),
-      portfoliosResponse.json(),
-    ]);
-
-    const user = extractUser(userData);
-    const portfolios = extractPortfolios(portfoliosData, userId);
-
-    if (!user) {
-      return fallbackData;
+    const { data } = await response.json();
+    if (!data) {
+      return { user: null, portfolios: [] };
     }
 
-    return {
-      user,
-      portfolios,
+    const user: MongoUser = {
+      _id: data._id,
+      name: data.name,
+      email: data.email,
+      avatar: data.avatar,
+      bio: data.bio || data.portfolioDescription,
+      location: data.location,
+      skills: data.skills || [],
+      followersCount: data.followersCount || 0,
+      followingCount: data.followingCount || 0,
     };
-  } catch {
-    return fallbackData;
+
+    const portfolios: MongoPortfolio[] = data.portfolios || [];
+
+    return { user, portfolios };
+  } catch (err) {
+    console.error("Lỗi fetch profile API:", err);
+    return { user: null, portfolios: [] };
   }
 }
 
 export default function ProfileClient({ userId }: ProfileClientProps) {
+  const { user: currentUser } = useAuthStore();
+  
   const [profileState, setProfileState] = useState<ProfileState>({
     user: null,
     portfolios: [],
   });
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+  const [initialFollowing, setInitialFollowing] = useState(false);
+  const [activeTab, setActiveTab] = useState<"works" | "about">("works");
 
   useEffect(() => {
     let isMounted = true;
@@ -225,15 +106,25 @@ export default function ProfileClient({ userId }: ProfileClientProps) {
 
       if (!isMounted) return;
 
-      const localPortfolios = readLocalUploadedPortfolios(userId);
-
       setProfileState({
         user: data.user,
-        portfolios: mergePortfolios([...localPortfolios, ...data.portfolios]),
+        portfolios: data.portfolios,
       });
 
       if (!data.user) {
         setErrorMessage("Không tìm thấy hồ sơ người dùng.");
+      } else if (currentUser) {
+        try {
+           const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+           const authorRes = await fetch(`${apiUrl}/users/${data.user._id}`);
+           if (authorRes.ok) {
+             const authorData = await authorRes.json();
+             const followers = authorData.data?.followers || [];
+             setInitialFollowing(followers.includes(currentUser._id || currentUser.id));
+           }
+        } catch (e) {
+           console.error(e);
+        }
       }
 
       setIsLoading(false);
@@ -244,15 +135,11 @@ export default function ProfileClient({ userId }: ProfileClientProps) {
     return () => {
       isMounted = false;
     };
-  }, [userId]);
+  }, [userId, currentUser]);
 
-  const totalLikes = useMemo(
-    () =>
-      profileState.portfolios.reduce(
-        (total, portfolio) => total + portfolio.likesCount,
-        0
-      ),
-    [profileState.portfolios]
+  const totalLikes = profileState.portfolios.reduce(
+    (total, portfolio) => total + (portfolio.likesCount || 0),
+    0
   );
 
   function handleFollowerChange(delta: number) {
@@ -271,32 +158,22 @@ export default function ProfileClient({ userId }: ProfileClientProps) {
 
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-background py-8 sm:py-12">
-        <div className="app-container">
-          <StateBlock
-            type="loading"
-            title="Đang tải hồ sơ..."
-            description="Hệ thống đang tải thông tin người dùng và danh sách tác phẩm."
-          />
-        </div>
+      <main className="min-h-screen bg-background flex items-center justify-center">
+        <StateBlock type="loading" title="Đang tải hồ sơ..." />
       </main>
     );
   }
 
   if (!profileState.user) {
     return (
-      <main className="min-h-screen bg-background py-8 sm:py-12">
-        <div className="app-container">
-          <StateBlock
-            type="error"
-            title="Không tìm thấy hồ sơ"
-            description={
-              errorMessage || "Người dùng không tồn tại hoặc đã bị xóa."
-            }
-            actionLabel="Quay về trang chủ"
-            actionHref="/"
-          />
-        </div>
+      <main className="min-h-screen bg-background flex items-center justify-center">
+        <StateBlock
+          type="error"
+          title="Không tìm thấy hồ sơ"
+          description={errorMessage || "Người dùng không tồn tại hoặc đã bị xóa khỏi hệ thống."}
+          actionLabel="Về trang chủ"
+          actionHref="/"
+        />
       </main>
     );
   }
@@ -304,136 +181,200 @@ export default function ProfileClient({ userId }: ProfileClientProps) {
   const user = profileState.user;
 
   return (
-    <main className="min-h-screen bg-background py-8 sm:py-12">
-      <div className="app-container">
-        <section className="surface overflow-hidden rounded-2xl">
-          <div className="h-36 bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-500" />
+    <main className="min-h-screen bg-background pb-12">
+      {/* Parallax Cover Photo (Sử dụng CSS sticky + âm z-index để tạo parallax fake nhẹ) */}
+      <div className="relative h-64 md:h-80 w-full overflow-hidden bg-surface-soft">
+        <div className="absolute inset-0 bg-gradient-to-r from-primary/40 via-accent/40 to-primary/40 opacity-80" />
+        <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=2000')] bg-cover bg-center mix-blend-overlay opacity-30" />
+      </div>
 
-          <div className="p-5 sm:p-8">
-            <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+      <div className="app-container relative -mt-24 sm:-mt-32">
+        <section className="surface rounded-3xl p-6 sm:p-10 shadow-2xl shadow-primary/5">
+          <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+            
+            {/* Avatar & Basic Info */}
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+              <div className="relative h-32 w-32 shrink-0 md:h-40 md:w-40">
+                <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-primary to-accent blur-md opacity-50" />
                 <img
                   src={user.avatar || "/next.svg"}
                   alt={user.name}
-                  className="-mt-16 h-28 w-28 rounded-full border-4 border-background object-cover"
+                  className="relative h-full w-full rounded-full border-4 border-surface object-cover shadow-lg"
                 />
+              </div>
 
-                <div>
-                  <p className="text-sm font-bold uppercase text-primary">
-                    Public Profile
-                  </p>
-                  <h1 className="mt-1 text-3xl font-bold">{user.name}</h1>
-                  <p className="mt-1 text-sm text-muted">{user.email}</p>
+              <div className="pt-2 sm:pt-0">
+                <h1 className="text-3xl font-extrabold sm:text-4xl">{user.name}</h1>
+                <div className="mt-2 flex flex-col gap-2 text-sm text-muted sm:flex-row sm:items-center">
+                  <span className="flex items-center gap-1.5"><Mail className="h-4 w-4" /> {user.email}</span>
                   {user.location && (
-                    <p className="mt-1 text-sm text-muted">{user.location}</p>
+                    <>
+                      <span className="hidden sm:inline">•</span>
+                      <span className="flex items-center gap-1.5"><MapPin className="h-4 w-4" /> {user.location}</span>
+                    </>
                   )}
                 </div>
-              </div>
 
-              <div className="flex w-full flex-col gap-3 md:w-auto md:flex-row">
-                <div className="w-full md:w-48">
-                  <FollowButton
-                    targetUserId={user.id}
-                    onFollowerChange={handleFollowerChange}
-                  />
-                </div>
-                <div className="w-full md:w-48">
-                  <ExportPdfButton
-                    profile={{
-                      name: user.name,
-                      title: user.bio || "Thành viên Artfolio",
-                      email: user.email,
-                      skills: user.skills,
-                      experience: [],
-                      socialLinks: [],
-                      works: profileState.portfolios,
-                    }}
+                <div className="mt-6">
+                  <UserStats
+                    portfoliosCount={profileState.portfolios.length}
+                    followersCount={user.followersCount}
+                    followingCount={user.followingCount}
+                    totalLikes={totalLikes}
                   />
                 </div>
               </div>
             </div>
 
-            <p className="mt-6 max-w-3xl leading-7 text-muted">{user.bio}</p>
-
-            <div className="mt-5 flex flex-wrap gap-2">
-              {user.skills.map((skill) => (
-                <span key={skill} className="badge">
-                  {skill}
-                </span>
-              ))}
+            {/* Actions (Follow & Export PDF) */}
+            <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row md:flex-col lg:flex-row pt-2">
+              <div className="w-full sm:w-48">
+                <FollowButton
+                  targetUserId={user._id}
+                  initialFollowing={initialFollowing}
+                  onFollowerChange={handleFollowerChange}
+                />
+              </div>
+              <div className="w-full sm:w-48">
+                <ExportPdfButton
+                  profile={{
+                    name: user.name,
+                    title: user.bio || "Thành viên Artfolio",
+                    email: user.email,
+                    skills: user.skills || [],
+                    experience: [],
+                    socialLinks: [],
+                    works: profileState.portfolios.map(p => ({
+                       title: p.title,
+                       category: p.category,
+                       description: p.description
+                    })),
+                  }}
+                />
+              </div>
             </div>
+          </div>
 
-            <div className="mt-6">
-              <UserStats
-                portfoliosCount={profileState.portfolios.length}
-                followersCount={user.followersCount}
-                followingCount={user.followingCount}
-                totalLikes={totalLikes}
-              />
-            </div>
+          {/* Animated Tabs */}
+          <div className="mt-10 border-b border-border">
+            <nav className="flex gap-8">
+              <button
+                onClick={() => setActiveTab("works")}
+                className={`relative pb-4 text-sm font-bold uppercase tracking-wider transition-colors ${
+                  activeTab === "works" ? "text-primary" : "text-muted hover:text-foreground"
+                }`}
+              >
+                <span className="flex items-center gap-2"><LayoutGrid className="h-4 w-4" /> Tác phẩm</span>
+                {activeTab === "works" && (
+                  <motion.div layoutId="activeTabIndicator" className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab("about")}
+                className={`relative pb-4 text-sm font-bold uppercase tracking-wider transition-colors ${
+                  activeTab === "about" ? "text-primary" : "text-muted hover:text-foreground"
+                }`}
+              >
+                <span className="flex items-center gap-2"><Info className="h-4 w-4" /> Giới thiệu</span>
+                {activeTab === "about" && (
+                  <motion.div layoutId="activeTabIndicator" className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                )}
+              </button>
+            </nav>
           </div>
         </section>
 
+        {/* Tab Content */}
         <section className="mt-8">
-          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <p className="text-sm font-bold uppercase text-primary">
-                Portfolio
-              </p>
-              <h2 className="text-2xl font-bold">Tác phẩm của {user.name}</h2>
-            </div>
+          <AnimatePresence mode="wait">
+            {activeTab === "works" && (
+              <motion.div
+                key="works"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+              >
+                {profileState.portfolios.length === 0 ? (
+                  <StateBlock
+                    type="empty"
+                    title="Chưa có tác phẩm nào"
+                    description="Người dùng này chưa chia sẻ tác phẩm nào lên cộng đồng."
+                  />
+                ) : (
+                  <div className="masonry-grid">
+                    {profileState.portfolios.map((portfolio) => (
+                      <Link
+                        key={portfolio._id}
+                        href={`/portfolio/${portfolio._id}`}
+                        className="masonry-item surface group block overflow-hidden rounded-2xl transition-all hover:-translate-y-1 hover:shadow-xl hover:shadow-primary/10"
+                      >
+                        <div className="aspect-[4/3] w-full overflow-hidden bg-surface-soft">
+                          <img
+                            src={portfolio.images?.[0] || "/next.svg"}
+                            alt={portfolio.title}
+                            className="h-full w-full object-cover transition duration-500 group-hover:scale-110"
+                          />
+                        </div>
 
-            <p className="text-sm text-muted">
-              {profileState.portfolios.length} tác phẩm được hiển thị
-            </p>
-          </div>
+                        <div className="p-5">
+                          <div className="mb-3 flex flex-wrap gap-2">
+                            <span className="badge text-xs">{portfolio.category}</span>
+                            {portfolio.tags?.slice(0, 2).map((tag) => (
+                              <span key={tag} className="text-xs font-medium text-muted-foreground">
+                                #{tag}
+                              </span>
+                            ))}
+                          </div>
 
-          {profileState.portfolios.length === 0 ? (
-            <StateBlock
-              type="empty"
-              title="Người dùng chưa có tác phẩm"
-              description="Khi người dùng đăng portfolio, danh sách sẽ hiển thị tại đây."
-            />
-          ) : (
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {profileState.portfolios.map((portfolio) => (
-                <Link
-                  key={portfolio.id}
-                  href={`/portfolio/${portfolio.slug || portfolio.id}`}
-                  className="surface group overflow-hidden rounded-2xl transition hover:-translate-y-1 hover:shadow-xl"
-                >
-                  <div className="aspect-[4/3] overflow-hidden bg-surface-soft">
-                    <img
-                      src={portfolio.image}
-                      alt={portfolio.title}
-                      className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-                    />
+                          <h3 className="text-lg font-bold group-hover:text-primary transition-colors">{portfolio.title}</h3>
+                          {portfolio.description && (
+                             <p className="mt-2 line-clamp-2 text-sm text-muted">
+                               {portfolio.description}
+                             </p>
+                          )}
+
+                          <div className="mt-4 flex items-center justify-between border-t border-border/50 pt-4 text-sm text-muted">
+                            <span className="flex items-center gap-1"><HeartIcon className="h-4 w-4" /> {portfolio.likesCount || 0}</span>
+                            <span>{portfolio.views || 0} lượt xem</span>
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
                   </div>
+                )}
+              </motion.div>
+            )}
 
-                  <div className="p-4">
-                    <div className="mb-3 flex flex-wrap gap-2">
-                      <span className="badge">{portfolio.category}</span>
-                      {portfolio.tags.slice(0, 2).map((tag) => (
-                        <span key={tag} className="badge">
-                          #{tag}
+            {activeTab === "about" && (
+              <motion.div
+                key="about"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+                className="surface rounded-2xl p-8 lg:w-2/3"
+              >
+                <h3 className="text-xl font-bold mb-4">Giới thiệu về tôi</h3>
+                <p className="leading-relaxed text-muted whitespace-pre-wrap">
+                  {user.bio || "Thành viên này chưa cập nhật phần giới thiệu bản thân."}
+                </p>
+
+                {user.skills && user.skills.length > 0 && (
+                  <div className="mt-8">
+                    <h3 className="text-xl font-bold mb-4">Kỹ năng chuyên môn</h3>
+                    <div className="flex flex-wrap gap-3">
+                      {user.skills.map((skill) => (
+                        <span key={skill} className="rounded-lg bg-primary/10 border border-primary/20 px-4 py-2 text-sm font-semibold text-primary">
+                          {skill}
                         </span>
                       ))}
                     </div>
-
-                    <h3 className="text-lg font-bold">{portfolio.title}</h3>
-                    <p className="mt-2 line-clamp-2 text-sm text-muted">
-                      {portfolio.description}
-                    </p>
-
-                    <div className="mt-4 flex items-center justify-between text-sm text-muted">
-                      <span>♥ {portfolio.likesCount}</span>
-                      <span>{portfolio.commentsCount} bình luận</span>
-                    </div>
                   </div>
-                </Link>
-              ))}
-            </div>
-          )}
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </section>
       </div>
     </main>

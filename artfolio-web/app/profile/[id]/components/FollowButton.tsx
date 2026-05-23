@@ -1,40 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api } from "../../../utils/api";
 import { useAuthStore } from "../../../store/useAuthStore";
+import toast from "react-hot-toast";
 
 type FollowButtonProps = {
   targetUserId: string;
   initialFollowing?: boolean;
   onFollowerChange?: (delta: number) => void;
 };
-
-const FOLLOWING_STORAGE_KEY = "artfolio-following-users";
-
-function readFollowingIds(): string[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = localStorage.getItem(FOLLOWING_STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as string[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveFollowingIds(ids: string[]) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(FOLLOWING_STORAGE_KEY, JSON.stringify(ids));
-}
-
-function shouldUseMockApi() {
-  return process.env.NEXT_PUBLIC_USE_MOCK_API !== "false";
-}
-
-async function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 export default function FollowButton({
   targetUserId,
@@ -45,40 +19,22 @@ export default function FollowButton({
 
   const [isFollowing, setIsFollowing] = useState(initialFollowing);
   const [isLoading, setIsLoading] = useState(false);
-  const [message, setMessage] = useState("");
 
-  const isOwnProfile = user?.id === targetUserId;
+  const isOwnProfile = user?._id === targetUserId || user?.id === targetUserId;
+  const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
 
   useEffect(() => {
-    const timerId = window.setTimeout(() => {
-      const followingIds = readFollowingIds();
-      setIsFollowing(followingIds.includes(targetUserId) || initialFollowing);
-    }, 0);
-
-    return () => {
-      window.clearTimeout(timerId);
-    };
-  }, [targetUserId, initialFollowing]);
-
-  async function callFollowApi() {
-    if (shouldUseMockApi()) {
-      await delay(350);
-      return;
-    }
-
-    await api.post(`/api/users/${targetUserId}/follow`);
-  }
+    setIsFollowing(initialFollowing);
+  }, [initialFollowing]);
 
   async function handleFollow() {
-    setMessage("");
-
-    if (!isAuthenticated || !user) {
-      setMessage("Vui lòng đăng nhập để theo dõi người dùng.");
+    if (!isAuthenticated || !user || !token) {
+      toast.error("Vui lòng đăng nhập để theo dõi người dùng.");
       return;
     }
 
     if (isOwnProfile) {
-      setMessage("Bạn không thể tự theo dõi chính mình.");
+      toast.error("Bạn không thể tự theo dõi chính mình.");
       return;
     }
 
@@ -86,30 +42,30 @@ export default function FollowButton({
     const nextFollowing = !isFollowing;
     const followerDelta = nextFollowing ? 1 : -1;
 
-    // Optimistic update: cập nhật UI ngay khi click
+    // Optimistic update
     setIsFollowing(nextFollowing);
     onFollowerChange?.(followerDelta);
     setIsLoading(true);
 
     try {
-      await callFollowApi();
-
-      const followingIds = readFollowingIds();
-
-      const nextFollowingIds = nextFollowing
-        ? Array.from(new Set([...followingIds, targetUserId]))
-        : followingIds.filter((id) => id !== targetUserId);
-
-      saveFollowingIds(nextFollowingIds);
-
-      setMessage(
-        nextFollowing ? "Đã theo dõi người dùng." : "Đã hủy theo dõi."
-      );
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+      const res = await fetch(`${apiUrl}/users/${targetUserId}/follow`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
+      });
+      
+      if (!res.ok) {
+        throw new Error("API call failed");
+      }
+      
+      toast.success(nextFollowing ? "Đã theo dõi người dùng." : "Đã hủy theo dõi.");
     } catch {
-      // Rollback nếu API fail
+      // Rollback
       setIsFollowing(previousFollowing);
       onFollowerChange?.(-followerDelta);
-      setMessage("Thao tác thất bại. Đã hoàn tác thay đổi.");
+      toast.error("Thao tác thất bại. Đã hoàn tác thay đổi.");
     } finally {
       setIsLoading(false);
     }
@@ -133,10 +89,6 @@ export default function FollowButton({
               ? "Đang theo dõi"
               : "Theo dõi"}
       </button>
-
-      {message && (
-        <p className="mt-2 text-center text-sm text-muted">{message}</p>
-      )}
     </div>
   );
 }

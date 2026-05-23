@@ -1,512 +1,452 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import toast from "react-hot-toast";
-import { useRouter } from "next/navigation";
-import { portfolios as samplePortfolios } from "../../data/portfolios";
+import Image from "next/image";
+import { useEffect, useState } from "react";
+import { formatDistanceToNow } from "date-fns";
+import { vi } from "date-fns/locale";
+import { motion } from "framer-motion";
+import { Heart, Eye, ArrowLeft, Trash2, Send, MessageCircle } from "lucide-react";
+import StateBlock from "../../components/StateBlock";
+import { useAuthStore } from "../../../store/useAuthStore";
 import type { PortfolioDetail } from "../../types/api";
 
-const LOCAL_PORTFOLIOS_KEY = "artfolio-local-portfolios";
-const LIKED_PORTFOLIOS_KEY = "artfolio-liked-portfolios";
-const LIKE_COUNTS_KEY = "artfolio-like-counts";
-const FOLLOWED_AUTHORS_KEY = "artfolio-followed-authors";
-
-const categoryLabels: Record<string, string> = {
-  design: "Design",
-  art: "Art",
-  photo: "Photo",
-  "3d": "3D",
-  other: "Other",
-};
-
-type ExtendedPortfolio = PortfolioDetail & {
-  id?: string;
-  slug?: string;
-  author?: {
-    id?: string;
-    name?: string;
-    avatar?: string;
-  };
-  user?: {
-    id?: string;
-    name?: string;
-    avatar?: string;
-  };
-  createdAt?: string;
-  colors?: string[];
-  tags?: string[];
-};
-
 type PortfolioDetailClientProps = {
-  id: string;
-  mode?: "page" | "modal";
+  portfolioId: string;
 };
 
-function readLocalPortfolios(): ExtendedPortfolio[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = localStorage.getItem(LOCAL_PORTFOLIOS_KEY);
-    return raw ? (JSON.parse(raw) as ExtendedPortfolio[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveLocalPortfolios(items: ExtendedPortfolio[]) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(LOCAL_PORTFOLIOS_KEY, JSON.stringify(items));
-}
-
-function readStringArray(key: string): string[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as string[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveStringArray(key: string, items: string[]) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(key, JSON.stringify(items));
-}
-
-function readNumberRecord(key: string): Record<string, number> {
-  if (typeof window === "undefined") return {};
-
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as Record<string, number>) : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveNumberRecord(key: string, value: Record<string, number>) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(key, JSON.stringify(value));
-}
-
-function getPortfolioId(portfolio: ExtendedPortfolio) {
-  return portfolio._id || portfolio.id || portfolio.slug || "";
-}
-
-function getAuthorId(portfolio: ExtendedPortfolio) {
-  return (
-    portfolio.author?.id ||
-    portfolio.user?.id ||
-    portfolio.author?.name ||
-    portfolio.user?.name ||
-    "unknown-author"
-  );
-}
-
-function getAuthorName(portfolio: ExtendedPortfolio) {
-  return portfolio.author?.name || portfolio.user?.name || "Creative User";
-}
+// Kiểu bình luận trả về từ Backend
+type Comment = {
+  _id: string;
+  user: {
+    _id: string;
+    name: string;
+    avatar?: string;
+  };
+  content: string;
+  createdAt: string;
+};
 
 export default function PortfolioDetailClient({
-  id,
-  mode = "page",
+  portfolioId,
 }: PortfolioDetailClientProps) {
-  const router = useRouter();
-
-  const [localPortfolios, setLocalPortfolios] = useState<ExtendedPortfolio[]>(
-    []
-  );
-  const [hasLoadedLocalStorage, setHasLoadedLocalStorage] = useState(false);
-
-  const [comments, setComments] = useState<string[]>([]);
-  const [commentText, setCommentText] = useState("");
-
-  const [likeCount, setLikeCount] = useState(0);
-  const [isLiked, setIsLiked] = useState(false);
-  const [isFollowing, setIsFollowing] = useState(false);
-
-  useEffect(() => {
-    const timerId = window.setTimeout(() => {
-      setLocalPortfolios(readLocalPortfolios());
-      setHasLoadedLocalStorage(true);
-    }, 0);
-
-    return () => {
-      window.clearTimeout(timerId);
-    };
-  }, []);
-
-  const [portfolio, setPortfolio] = useState<ExtendedPortfolio | null>(null);
+  const { user: currentUser, isAuthenticated, accessToken } = useAuthStore();
+  
+  const [portfolio, setPortfolio] = useState<PortfolioDetail | null>(null);
+  const [comments, setComments] = useState<Comment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
+  
+  // Tương tác
+  const [isLiked, setIsLiked] = useState(false);
+  const [likesCount, setLikesCount] = useState(0);
+  const [commentContent, setCommentContent] = useState("");
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
 
   useEffect(() => {
-    if (!hasLoadedLocalStorage) return;
+    let isMounted = true;
 
-    async function fetchPortfolio() {
+    async function loadData() {
+      setIsLoading(true);
+      setErrorMessage("");
+
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-        const res = await fetch(`${apiUrl}/portfolios/${id}`);
-        if (res.ok) {
-          const data = await res.json();
-          // Lấy data từ response
-          const fetchedData = data.data || data;
-          setPortfolio(fetchedData);
-          setIsLoading(false);
-          return;
+        
+        // Fetch Portfolio Detail
+        const pRes = await fetch(`${apiUrl}/portfolios/${portfolioId}`, {
+          cache: "no-store",
+        });
+
+        if (!pRes.ok) {
+          throw new Error("Không tìm thấy tác phẩm hoặc có lỗi xảy ra");
         }
-      } catch (err) {
-        console.error("Lỗi gọi API, dùng fallback tĩnh:", err);
+        
+        const pJson = await pRes.json();
+        const data: PortfolioDetail = pJson.data;
+
+        // Fetch Comments
+        const cRes = await fetch(`${apiUrl}/comments/portfolio/${portfolioId}`, {
+          cache: "no-store",
+        });
+        
+        if (!isMounted) return;
+
+        setPortfolio(data);
+        setLikesCount(data.likesCount || 0);
+
+        if (currentUser) {
+          const userId = currentUser._id || currentUser.id;
+          if (data.likes && data.likes.includes(userId)) {
+            setIsLiked(true);
+          }
+        }
+
+        if (cRes.ok) {
+          const cJson = await cRes.json();
+          if (cJson.status === "success") {
+            setComments(cJson.data || []);
+          }
+        }
+      } catch (err: any) {
+        if (isMounted) setErrorMessage(err.message);
+      } finally {
+        if (isMounted) setIsLoading(false);
       }
-
-      // Fallback local
-      const allPortfolios = [
-        ...localPortfolios,
-        ...(samplePortfolios as unknown as ExtendedPortfolio[]),
-      ];
-
-      const found = allPortfolios.find((item) => {
-        const portfolioId = getPortfolioId(item);
-        const slug = item.slug || "";
-        return portfolioId === id || slug === id;
-      });
-      
-      setPortfolio(found || null);
-      setIsLoading(false);
     }
 
-    fetchPortfolio();
-  }, [id, hasLoadedLocalStorage, localPortfolios]);
-
-  const portfolioId = portfolio ? getPortfolioId(portfolio) : id;
-  const authorId = portfolio ? getAuthorId(portfolio) : "";
-  const authorName = portfolio ? getAuthorName(portfolio) : "Creative User";
-
-  useEffect(() => {
-    if (!portfolio) return;
-
-    const timerId = window.setTimeout(() => {
-      const likedIds = readStringArray(LIKED_PORTFOLIOS_KEY);
-      const followedAuthors = readStringArray(FOLLOWED_AUTHORS_KEY);
-      const likeCounts = readNumberRecord(LIKE_COUNTS_KEY);
-
-      setIsLiked(likedIds.includes(portfolioId));
-      setIsFollowing(followedAuthors.includes(authorId));
-      setLikeCount(likeCounts[portfolioId] ?? portfolio.likesCount ?? 0);
-    }, 0);
+    loadData();
 
     return () => {
-      window.clearTimeout(timerId);
+      isMounted = false;
     };
-  }, [portfolio, portfolioId, authorId]);
+  }, [portfolioId, currentUser]);
 
-  function showStatus(message: string) {
-    toast.success(message);
-  }
+  const handleToggleLike = async () => {
+    if (!isAuthenticated || !currentUser) {
+      alert("Vui lòng đăng nhập để thích tác phẩm này.");
+      return;
+    }
 
-  function updateLocalPortfolioLikes(nextLikeCount: number) {
-    const updatedLocalPortfolios = readLocalPortfolios().map((item) => {
-      if (getPortfolioId(item) !== portfolioId) {
-        return item;
+    try {
+      // Optimistic Update
+      const newIsLiked = !isLiked;
+      setIsLiked(newIsLiked);
+      setLikesCount(prev => newIsLiked ? prev + 1 : prev - 1);
+
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+      const res = await fetch(`${apiUrl}/portfolios/${portfolioId}/like`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (!res.ok) {
+        // Rollback if failed
+        setIsLiked(!newIsLiked);
+        setLikesCount(prev => !newIsLiked ? prev + 1 : prev - 1);
+        alert("Lỗi khi tương tác. Vui lòng thử lại.");
       }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
-      return {
-        ...item,
-        likesCount: nextLikeCount,
-      };
-    });
+  const handlePostComment = async () => {
+    if (!isAuthenticated || !currentUser) {
+      alert("Vui lòng đăng nhập để bình luận.");
+      return;
+    }
 
-    saveLocalPortfolios(updatedLocalPortfolios);
-    setLocalPortfolios(updatedLocalPortfolios);
-  }
+    if (!commentContent.trim()) return;
 
-  function handleToggleLike() {
-    if (!portfolio) return;
+    setIsSubmittingComment(true);
 
-    const likedIds = readStringArray(LIKED_PORTFOLIOS_KEY);
-    const likeCounts = readNumberRecord(LIKE_COUNTS_KEY);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+      const res = await fetch(`${apiUrl}/comments`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          portfolioId,
+          content: commentContent,
+        }),
+      });
 
-    const nextIsLiked = !isLiked;
-    const nextLikeCount = nextIsLiked
-      ? likeCount + 1
-      : Math.max(0, likeCount - 1);
+      if (res.ok) {
+        const json = await res.json();
+        // Backend trả về bình luận mới tạo trong json.data
+        const newComment = json.data;
+        if (newComment) {
+          // Gắn thêm info user hiện tại vào để UI hiện luôn không cần reload
+          const formattedComment: Comment = {
+            _id: newComment._id,
+            content: newComment.content,
+            createdAt: newComment.createdAt || new Date().toISOString(),
+            user: {
+              _id: currentUser._id || currentUser.id,
+              name: currentUser.name,
+              avatar: currentUser.avatar,
+            }
+          };
+          
+          setComments(prev => [formattedComment, ...prev]);
+          setCommentContent("");
+        }
+      } else {
+        alert("Có lỗi khi đăng bình luận.");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Có lỗi khi đăng bình luận.");
+    } finally {
+      setIsSubmittingComment(false);
+    }
+  };
 
-    const nextLikedIds = nextIsLiked
-      ? [...likedIds, portfolioId]
-      : likedIds.filter((item) => item !== portfolioId);
+  const handleDeleteComment = async (commentId: string) => {
+    const confirmDelete = window.confirm("Bạn có chắc chắn muốn xóa bình luận này?");
+    if (!confirmDelete) return;
 
-    const uniqueLikedIds = Array.from(new Set(nextLikedIds));
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+      const res = await fetch(`${apiUrl}/comments/${commentId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
 
-    likeCounts[portfolioId] = nextLikeCount;
+      if (res.ok) {
+        // Xóa khỏi UI
+        setComments(prev => prev.filter(c => c._id !== commentId));
+      } else {
+        alert("Không thể xóa bình luận này.");
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Lỗi khi xóa bình luận.");
+    }
+  };
 
-    saveStringArray(LIKED_PORTFOLIOS_KEY, uniqueLikedIds);
-    saveNumberRecord(LIKE_COUNTS_KEY, likeCounts);
-    updateLocalPortfolioLikes(nextLikeCount);
-    
-    window.dispatchEvent(new Event("artfolio-like-updated"));
-
-    setIsLiked(nextIsLiked);
-    setLikeCount(nextLikeCount);
-
-    showStatus(nextIsLiked ? "Đã thích tác phẩm" : "Đã bỏ thích");
-  }
-
-  function handleToggleFollow() {
-    if (!portfolio) return;
-
-    const followedAuthors = readStringArray(FOLLOWED_AUTHORS_KEY);
-    const nextIsFollowing = !isFollowing;
-
-    const nextFollowedAuthors = nextIsFollowing
-      ? [...followedAuthors, authorId]
-      : followedAuthors.filter((item) => item !== authorId);
-
-    const uniqueFollowedAuthors = Array.from(new Set(nextFollowedAuthors));
-
-    saveStringArray(FOLLOWED_AUTHORS_KEY, uniqueFollowedAuthors);
-    setIsFollowing(nextIsFollowing);
-
-    showStatus(
-      nextIsFollowing
-        ? `Đang theo dõi ${authorName}`
-        : `Đã hủy theo dõi ${authorName}`
-    );
-  }
-
-  function handleAddComment() {
-    if (!commentText.trim()) return;
-
-    setComments((current) => [...current, commentText.trim()]);
-    setCommentText("");
-    showStatus("Đã bình luận");
-  }
-
-  if (!hasLoadedLocalStorage || isLoading) {
+  if (isLoading) {
     return (
-      <main className="min-h-screen bg-background py-10">
-        <div className="app-container">
-          <div className="surface rounded-lg p-10 text-center">
-            <p className="text-lg font-bold">Đang tải tác phẩm...</p>
-          </div>
-        </div>
+      <main className="min-h-screen bg-background flex items-center justify-center">
+        <StateBlock type="loading" title="Đang tải tác phẩm..." />
       </main>
     );
   }
 
-  if (!portfolio) {
+  if (errorMessage || !portfolio) {
     return (
-      <main className="min-h-screen bg-background py-10">
-        <div className="app-container">
-          <div className="surface rounded-lg p-10 text-center">
-            <p className="text-lg font-bold">Không tìm thấy tác phẩm</p>
-            <p className="mt-2 text-sm text-muted">
-              Tác phẩm không tồn tại hoặc chưa được lưu trong trình duyệt này.
-            </p>
-
-            <Link href="/dashboard" className="btn btn-primary mt-5">
-              Quay về Dashboard
-            </Link>
-          </div>
-        </div>
+      <main className="min-h-screen bg-background flex items-center justify-center">
+        <StateBlock
+          type="error"
+          title="Không tìm thấy tác phẩm"
+          description={errorMessage || "Tác phẩm không tồn tại hoặc đã bị xóa."}
+          actionLabel="Quay lại khám phá"
+          actionHref="/"
+        />
       </main>
-    );
-  }
-
-  const image = portfolio.images?.[0] || "/next.svg";
-  const tags = portfolio.tags || [];
-  const colors = portfolio.colors || [];
-
-  const content = (
-    <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
-      <div className="grid gap-4">
-        <div className="overflow-hidden rounded-lg bg-surface-soft">
-          {image.startsWith("data:") ? (
-            <img
-              src={image}
-              alt={portfolio.title}
-              className="max-h-[520px] w-full object-cover"
-            />
-          ) : (
-            <div className="relative aspect-video w-full bg-surface-soft">
-              <Image
-                src={image}
-                alt={portfolio.title}
-                fill
-                sizes="(max-width: 1024px) 100vw, 900px"
-                className="object-cover"
-              />
-            </div>
-          )}
-        </div>
-
-        <div className="surface rounded-lg p-5">
-          <div className="mb-4 flex flex-wrap gap-2">
-            <span className="badge">
-              {categoryLabels[portfolio.category] ?? portfolio.category}
-            </span>
-
-            {tags.map((tag) => (
-              <span key={tag} className="badge">
-                #{tag}
-              </span>
-            ))}
-          </div>
-
-          <h1 className="text-3xl font-bold">{portfolio.title}</h1>
-
-          <p className="mt-4 leading-7 text-muted">{portfolio.description}</p>
-        </div>
-
-        <div className="surface rounded-lg p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-xl font-bold">Bình luận</h2>
-            <span className="text-sm text-muted">{comments.length} mục</span>
-          </div>
-
-          <div className="mb-4 flex gap-3">
-            <input
-              value={commentText}
-              onChange={(event) => setCommentText(event.target.value)}
-              className="input"
-              placeholder="Viết bình luận..."
-            />
-
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={handleAddComment}
-            >
-              Gửi
-            </button>
-          </div>
-
-          {comments.length === 0 ? (
-            <p className="text-sm text-muted">Chưa có bình luận nào.</p>
-          ) : (
-            <div className="grid gap-3">
-              {comments.map((comment, index) => (
-                <div
-                  key={`${comment}-${index}`}
-                  className="rounded-lg border border-border bg-surface-soft p-3 text-sm"
-                >
-                  {comment}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <aside className="grid h-fit gap-4">
-        <div className="surface rounded-lg p-5">
-          <div className="flex items-center gap-3">
-            <div className="grid h-12 w-12 place-items-center rounded-full bg-primary text-lg font-bold text-white">
-              {authorName.slice(0, 1)}
-            </div>
-
-            <div>
-              <p className="font-bold">{authorName}</p>
-              <p className="text-sm text-muted">
-                {portfolio.createdAt
-                  ? new Date(portfolio.createdAt).toLocaleDateString("vi-VN")
-                  : "Chưa rõ ngày"}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-5 grid grid-cols-2 gap-3 text-center">
-            <div className="rounded-lg border border-border bg-surface-soft p-3">
-              <strong className="block text-xl">
-                {portfolio.views?.toLocaleString("vi-VN") || 0}
-              </strong>
-              <span className="text-xs text-muted">lượt xem</span>
-            </div>
-
-            <div className="rounded-lg border border-border bg-surface-soft p-3">
-              <strong className="block text-xl">
-                {likeCount.toLocaleString("vi-VN")}
-              </strong>
-              <span className="text-xs text-muted">lượt thích</span>
-            </div>
-          </div>
-
-
-          <button
-            type="button"
-            className={`btn mt-5 w-full ${
-              isLiked ? "btn-primary" : "btn-secondary"
-            }`}
-            onClick={handleToggleLike}
-          >
-            {isLiked ? "Đã thích" : "Thích"}
-          </button>
-
-          <button
-            type="button"
-            className={`btn mt-3 w-full ${
-              isFollowing ? "btn-primary" : "btn-secondary"
-            }`}
-            onClick={handleToggleFollow}
-          >
-            {isFollowing ? "Đang theo dõi" : "Theo dõi"}
-          </button>
-
-
-        </div>
-
-        {colors.length > 0 && (
-          <div className="surface rounded-lg p-5">
-            <h3 className="mb-3 font-bold">Bảng màu</h3>
-
-            <div className="grid grid-cols-3 gap-2">
-              {colors.map((color) => (
-                <div
-                  key={color}
-                  className="h-12 rounded-md border border-border"
-                  style={{ backgroundColor: color }}
-                  title={color}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-      </aside>
-    </div>
-  );
-
-  if (mode === "modal") {
-    return (
-      <div className="fixed inset-0 z-50 overflow-y-auto bg-black/55 px-4 py-8">
-        <div className="mx-auto max-w-6xl rounded-xl bg-background p-5 shadow-2xl">
-          <div className="mb-4 flex justify-end">
-            <button
-              type="button"
-              onClick={() => router.back()}
-              className="grid h-9 w-9 place-items-center rounded-md border border-border bg-surface text-sm font-bold"
-            >
-              X
-            </button>
-          </div>
-
-          {content}
-        </div>
-      </div>
     );
   }
 
   return (
-    <main className="min-h-screen bg-background py-10">
-      <div className="app-container">
-        <Link
-          href="/dashboard"
-          className="mb-5 inline-block text-sm font-bold text-primary"
-        >
-          ← Quay về Dashboard
-        </Link>
+    <main className="min-h-screen bg-background">
+      {/* Sticky Top Bar (Back Button) */}
+      <div className="sticky top-0 z-40 border-b border-border/50 bg-surface/80 backdrop-blur-lg">
+        <div className="app-container flex h-16 items-center justify-between">
+          <Link href="/" className="flex items-center gap-2 text-sm font-semibold text-muted hover:text-foreground transition-colors">
+            <ArrowLeft className="h-4 w-4" /> Quay lại
+          </Link>
+          <div className="flex items-center gap-3">
+             <span className="flex items-center gap-1.5 text-sm font-semibold text-muted">
+               <Eye className="h-4 w-4" /> {portfolio.views?.toLocaleString("vi-VN") || 0}
+             </span>
+             <button
+               onClick={handleToggleLike}
+               className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-all ${
+                 isLiked ? "bg-danger/10 text-danger hover:bg-danger/20" : "bg-surface-soft text-muted hover:text-foreground hover:bg-border"
+               }`}
+             >
+               <motion.div animate={{ scale: isLiked ? [1, 1.4, 1] : 1 }} transition={{ duration: 0.3 }}>
+                 <Heart className="h-4 w-4" fill={isLiked ? "currentColor" : "none"} />
+               </motion.div>
+               {likesCount.toLocaleString("vi-VN")}
+             </button>
+          </div>
+        </div>
+      </div>
 
-        {content}
+      <div className="app-container py-8 lg:py-12">
+        <div className="grid gap-12 lg:grid-cols-[1fr_380px] xl:gap-20">
+          
+          {/* Cột trái: Ảnh tràn viền cực nét */}
+          <div className="flex flex-col gap-6">
+            <motion.h1 
+              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} 
+              className="text-4xl font-extrabold sm:text-5xl"
+            >
+              {portfolio.title}
+            </motion.h1>
+
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }}
+              className="overflow-hidden rounded-2xl border border-border/50 shadow-2xl"
+            >
+              {portfolio.images.map((img, idx) => (
+                <div key={idx} className="relative w-full">
+                  <Image
+                    src={img}
+                    alt={`${portfolio.title} - ảnh ${idx + 1}`}
+                    width={1200}
+                    height={800}
+                    className="h-auto w-full object-cover"
+                    priority={idx === 0}
+                  />
+                </div>
+              ))}
+            </motion.div>
+          </div>
+
+          {/* Cột phải: Sticky Sidebar */}
+          <div className="relative">
+            <div className="sticky top-24 flex flex-col gap-8">
+              
+              {/* Tác giả & Info */}
+              <motion.section 
+                initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}
+                className="surface rounded-2xl p-6"
+              >
+                <div className="flex items-center gap-4 border-b border-border/50 pb-6">
+                  <Link href={`/profile/${portfolio.user._id}`}>
+                    <img
+                      src={portfolio.user.avatar || "/next.svg"}
+                      alt={portfolio.user.name}
+                      className="h-16 w-16 rounded-full border-2 border-border object-cover transition-transform hover:scale-105"
+                    />
+                  </Link>
+                  <div>
+                    <h3 className="text-lg font-bold">
+                      <Link href={`/profile/${portfolio.user._id}`} className="hover:text-primary transition-colors">
+                        {portfolio.user.name}
+                      </Link>
+                    </h3>
+                    <p className="text-sm text-muted">
+                      Ngày đăng: {new Date(portfolio.createdAt).toLocaleDateString("vi-VN")}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-6">
+                  <h4 className="text-sm font-bold uppercase tracking-wider text-muted mb-3">Mô tả</h4>
+                  <p className="text-foreground leading-relaxed">
+                    {portfolio.description || "Tác giả không để lại mô tả."}
+                  </p>
+                </div>
+
+                <div className="mt-6 flex flex-wrap gap-2">
+                  <span className="badge border-primary/30 text-primary">{portfolio.category}</span>
+                  {portfolio.tags?.map((tag) => (
+                    <span key={tag} className="badge">#{tag}</span>
+                  ))}
+                </div>
+
+                {portfolio.colors && portfolio.colors.length > 0 && (
+                  <div className="mt-6">
+                    <h4 className="text-sm font-bold uppercase tracking-wider text-muted mb-3">Bảng Màu</h4>
+                    <div className="flex gap-2">
+                      {portfolio.colors.map((color) => (
+                        <div
+                          key={color}
+                          className="h-8 w-full rounded-md shadow-sm border border-border"
+                          style={{ backgroundColor: color }}
+                          title={color}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </motion.section>
+
+              {/* Bình luận */}
+              <motion.section 
+                initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }}
+                className="surface rounded-2xl p-6"
+              >
+                <h3 className="flex items-center gap-2 text-xl font-bold mb-6">
+                  <MessageCircle className="h-5 w-5" /> Bình luận ({comments.length})
+                </h3>
+
+                {isAuthenticated ? (
+                  <div className="flex gap-3 mb-8">
+                    <img
+                      src={currentUser?.avatar || "/next.svg"}
+                      alt="Avatar"
+                      className="h-10 w-10 shrink-0 rounded-full border border-border object-cover"
+                    />
+                    <div className="flex-1">
+                      <textarea
+                        rows={2}
+                        className="w-full rounded-xl border border-border bg-surface-soft px-4 py-3 text-sm placeholder-muted outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                        placeholder="Bạn nghĩ gì về tác phẩm này?"
+                        value={commentContent}
+                        onChange={(e) => setCommentContent(e.target.value)}
+                      />
+                      <div className="mt-2 flex justify-end">
+                        <button
+                          onClick={handlePostComment}
+                          disabled={!commentContent.trim() || isSubmittingComment}
+                          className="btn btn-primary h-9 px-4 rounded-lg flex items-center gap-2"
+                        >
+                          <Send className="h-4 w-4" /> {isSubmittingComment ? "Đang gửi..." : "Gửi"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mb-8 rounded-xl border border-border bg-surface-soft p-4 text-center">
+                    <p className="text-sm text-muted">Vui lòng <Link href="/login" className="text-primary font-bold hover:underline">đăng nhập</Link> để bình luận.</p>
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-6 max-h-[500px] overflow-y-auto pr-2 hide-scrollbar">
+                  {comments.length === 0 ? (
+                    <p className="text-center text-sm text-muted">Chưa có bình luận nào.</p>
+                  ) : (
+                    comments.map((comment) => {
+                      const isMyComment = currentUser && (currentUser._id === comment.user._id || currentUser.id === comment.user._id);
+                      return (
+                        <div key={comment._id} className="group flex gap-3">
+                          <Link href={`/profile/${comment.user._id}`}>
+                            <img
+                              src={comment.user.avatar || "/next.svg"}
+                              alt={comment.user.name}
+                              className="h-10 w-10 shrink-0 rounded-full border border-border object-cover"
+                            />
+                          </Link>
+                          <div className="flex-1 rounded-2xl rounded-tl-none bg-surface-soft p-4 relative">
+                            <div className="mb-1 flex items-baseline justify-between">
+                              <Link href={`/profile/${comment.user._id}`}>
+                                <strong className="text-sm font-bold hover:text-primary transition-colors">
+                                  {comment.user.name}
+                                </strong>
+                              </Link>
+                              <span className="text-xs text-muted">
+                                {formatDistanceToNow(new Date(comment.createdAt), {
+                                  addSuffix: true,
+                                  locale: vi,
+                                })}
+                              </span>
+                            </div>
+                            <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">
+                              {comment.content}
+                            </p>
+
+                            {/* Nút xóa bình luận */}
+                            {isMyComment && (
+                              <button
+                                onClick={() => handleDeleteComment(comment._id)}
+                                className="absolute -right-2 -top-2 rounded-full bg-danger text-white p-1.5 shadow-md opacity-0 transition-all hover:scale-110 group-hover:opacity-100"
+                                title="Xóa bình luận"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </motion.section>
+            </div>
+          </div>
+        </div>
       </div>
     </main>
   );
