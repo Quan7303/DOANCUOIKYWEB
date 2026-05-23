@@ -1,12 +1,16 @@
 import { portfolioService } from '~/services/portfolioService.js'
 import { cloudinary } from '~/middlewares/uploadMiddleware.js'
+import Notification from '~/models/notificationModel.js'
+import { emitNotification } from '~/sockets/socketHandler.js'
 
 const createPortfolio = async (req, res, next) => {
   try {
-    const result = await portfolioService.createPortfolio(req.body, req.file, req.user)
+
+    const io = req.app.get('io')
+    const result = await portfolioService.createPortfolio(req.body, req.file, req.user, io)
     res.status(201).json({ status: 'success', data: result })
   } catch (error) {
-    // 🚨 QUAN TRỌNG: Thu hồi (Xóa) ảnh đã upload lên Cloudinary nếu DB lưu thất bại!
+
     if (req.file && req.file.filename) {
       cloudinary.uploader.destroy(req.file.filename).catch(err => {
         console.error('Không thể xóa ảnh rác trên Cloudinary:', err)
@@ -57,16 +61,28 @@ const toggleLike = async (req, res, next) => {
     const userId = req.user._id.toString()
     const { portfolio, isLiked } = await portfolioService.toggleLike(req.params.id, userId)
 
-    // Chỉ gửi thông báo socket nếu đó là hành động THÍCH (isLiked === true) và người thích không phải chủ tác phẩm
+    // Chỉ gửi thông báo khi THÍCH (không phải bỏ thích) và không phải chủ tác phẩm
     if (isLiked && portfolio.user._id.toString() !== userId) {
       const io = req.app.get('io')
+
+      // Lưu Notification vào DB
+      await Notification.create({
+        recipient: portfolio.user._id,
+        sender: req.user._id,
+        type: 'like',
+        portfolio: portfolio._id,
+      })
+
+      // Phát socket realtime
       if (io) {
-        io.to(`user_${portfolio.user._id}`).emit('send_notification', {
-          type: 'like',
-          senderName: req.user.name || 'Ai đó',
-          portfolioTitle: portfolio.title,
-          portfolioId: portfolio._id
-        })
+        emitNotification(
+            io,
+            portfolio.user._id.toString(),
+            'like',
+            req.user.name || 'Ai đó',
+            portfolio.title,
+            portfolio._id.toString()
+        )
       }
     }
 

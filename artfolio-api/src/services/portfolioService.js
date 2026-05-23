@@ -2,11 +2,12 @@ import mongoose from 'mongoose'
 import Portfolio from '~/models/portfolioModel.js'
 import Comment from '~/models/commentModel.js'
 import Notification from '~/models/notificationModel.js'
+import User from '~/models/userModel.js'
 import { cloudinary } from '~/middlewares/uploadMiddleware.js'
 import { extractColorsFromUrl } from '~/utils/colorExtractor.js'
 import { ApiError } from '~/utils/ApiError.js'
 
-// Hàm trích xuất publicId từ URL Cloudinary
+// Trích xuất publicId từ URL Cloudinary
 const getPublicIdFromUrl = (url) => {
   if (!url || !url.includes('/image/upload/')) return null
   const parts = url.split('/image/upload/')
@@ -23,7 +24,11 @@ const getPublicIdFromUrl = (url) => {
   return pathWithoutVersion
 }
 
-const createPortfolio = async (reqBody, file, user) => {
+/**
+ * Tạo portfolio mới.
+ * io được truyền vào để phát thông báo new_post đến followers ngay sau khi lưu DB.
+ */
+const createPortfolio = async (reqBody, file, user, io = null) => {
   if (!file) {
     throw new ApiError(400, 'Vui lòng chọn ảnh để tải lên')
   }
@@ -43,6 +48,37 @@ const createPortfolio = async (reqBody, file, user) => {
   })
 
   await portfolio.populate('user', 'name avatar')
+
+  // ── Gửi thông báo bài mới đến tất cả followers ──────────────────────────
+  if (io) {
+    try {
+      const author = await User.findById(user._id).select('followers name')
+      if (author && author.followers.length > 0) {
+        const { emitNewPostToFollowers } = await import('~/sockets/socketHandler.js')
+
+        // Lưu Notification cho từng follower vào DB
+        const notifDocs = author.followers.map((followerId) => ({
+          recipient: followerId,
+          sender: user._id,
+          type: 'new_post',
+          portfolio: portfolio._id,
+        }))
+        await Notification.insertMany(notifDocs)
+
+        // Phát socket realtime
+        emitNewPostToFollowers(
+            io,
+            author.followers.map((id) => id.toString()),
+            author.name,
+            portfolio._id.toString(),
+            portfolio.title
+        )
+      }
+    } catch (err) {
+      // Không để lỗi thông báo làm hỏng response tạo portfolio
+      console.error('Lỗi khi gửi thông báo bài mới:', err.message)
+    }
+  }
 
   return portfolio
 }
@@ -79,10 +115,10 @@ const getPortfolioList = async (queryParams) => {
 
   const [portfolios, totalCount] = await Promise.all([
     Portfolio.find(query)
-      .populate('user', 'name avatar')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit)),
+        .populate('user', 'name avatar')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit)),
     Portfolio.countDocuments(query)
   ])
 
@@ -97,9 +133,9 @@ const getPortfolioList = async (queryParams) => {
 
 const getPortfolioDetail = async (portfolioId) => {
   const portfolio = await Portfolio.findByIdAndUpdate(
-    portfolioId,
-    { $inc: { views: 1 } },
-    { returnDocument: 'after' }
+      portfolioId,
+      { $inc: { views: 1 } },
+      { returnDocument: 'after' }
   ).populate('user', 'name avatar portfolioTitle')
 
   if (!portfolio) {
@@ -146,7 +182,7 @@ const deletePortfolio = async (portfolioId, user) => {
     throw new ApiError(403, 'Bạn không có quyền xóa tác phẩm này')
   }
 
-  // Cascade Delete sử dụng MongoDB Transaction với Fallback
+
   const session = await mongoose.startSession()
   let isTransactionActive = false
 
@@ -162,7 +198,6 @@ const deletePortfolio = async (portfolioId, user) => {
   } catch (transactionError) {
     if (isTransactionActive) await session.abortTransaction()
 
-    // Fallback: Xóa tuần tự khi MongoDB local không hỗ trợ Transaction
     console.warn('⚠️ Transaction không được hỗ trợ. Chuyển sang xóa tuần tự (Fallback)...')
     await Portfolio.deleteOne({ _id: portfolioId })
     await Comment.deleteMany({ portfolio: portfolioId })
@@ -171,7 +206,6 @@ const deletePortfolio = async (portfolioId, user) => {
     session.endSession()
   }
 
-  // Xóa ảnh trên Cloudinary
   for (const imageUrl of portfolio.images) {
     const publicId = getPublicIdFromUrl(imageUrl)
     if (publicId) {
