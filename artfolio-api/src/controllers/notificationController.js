@@ -1,10 +1,7 @@
 import Notification from '~/models/notificationModel.js'
 import { ApiError } from '~/utils/ApiError.js'
 
-/**
- * GET /api/notifications
- * Lấy danh sách thông báo của user đang đăng nhập (mới nhất lên đầu, tối đa 50)
- */
+
 const getMyNotifications = async (req, res, next) => {
   try {
     const notifications = await Notification.find({ recipient: req.user._id })
@@ -26,10 +23,7 @@ const getMyNotifications = async (req, res, next) => {
   }
 }
 
-/**
- * PATCH /api/notifications/read-all
- * Đánh dấu tất cả thông báo của user là đã đọc
- */
+
 const markAllAsRead = async (req, res, next) => {
   try {
     await Notification.updateMany(
@@ -46,10 +40,7 @@ const markAllAsRead = async (req, res, next) => {
   }
 }
 
-/**
- * PATCH /api/notifications/:id/read
- * Đánh dấu 1 thông báo là đã đọc
- */
+
 const markAsRead = async (req, res, next) => {
   try {
     const notification = await Notification.findOneAndUpdate(
@@ -71,10 +62,7 @@ const markAsRead = async (req, res, next) => {
   }
 }
 
-/**
- * DELETE /api/notifications/:id
- * Xóa 1 thông báo
- */
+
 const deleteNotification = async (req, res, next) => {
   try {
     const notification = await Notification.findOneAndDelete({
@@ -95,10 +83,7 @@ const deleteNotification = async (req, res, next) => {
   }
 }
 
-/**
- * DELETE /api/notifications
- * Xóa toàn bộ thông báo của user
- */
+
 const deleteAllNotifications = async (req, res, next) => {
   try {
     await Notification.deleteMany({ recipient: req.user._id })
