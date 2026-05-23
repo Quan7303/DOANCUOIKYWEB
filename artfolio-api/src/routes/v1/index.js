@@ -1,5 +1,21 @@
-/**
- * Updated by trungquandev.com's author on August 17 2023
- * YouTube: https://youtube.com/@trungquandev
- * "A bit of fragrance clings to the hand that gives flowers!"
- */
+import express from 'express'
+
+import authRoutes from './authRoutes.js'
+import { portfolioRoutes } from './portfolioRoutes.js'
+import aiRoutes from './aiRoutes.js'
+import commentRoutes from './commentRoutes.js'
+import userRoutes from './userRoutes.js'
+
+const Router = express.Router()
+
+Router.use('/auth', authRoutes)
+
+Router.use('/portfolios', portfolioRoutes)
+
+Router.use('/ai', aiRoutes)
+
+Router.use('/comments', commentRoutes)
+
+Router.use('/users', userRoutes)
+
+export const APIs_V1 = Router
