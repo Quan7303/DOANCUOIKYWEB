@@ -39,3 +39,6 @@ coverage/
 # Misc
 .vercel
 .turbo
+
+# Antigravity Kit Agent
+.agent/

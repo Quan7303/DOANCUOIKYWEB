@@ -3,9 +3,10 @@ import Link from "next/link";
 const footerLinks = [
   { href: "/", label: "Trang chủ" },
   { href: "/portfolios", label: "Khám phá" },
+  { href: "/about", label: "Giới thiệu" },
+  { href: "/contact", label: "Liên hệ" },
   { href: "/dashboard", label: "Dashboard" },
   { href: "/login", label: "Đăng nhập" },
-  { href: "/signup", label: "Đăng ký" },
 ];
 
 export default function Footer() {

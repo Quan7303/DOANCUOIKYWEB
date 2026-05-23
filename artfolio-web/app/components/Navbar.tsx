@@ -10,6 +10,7 @@ import { useThemeStore } from "../store/useThemeStore";
 const navLinks = [
   { href: "/", label: "Trang chủ" },
   { href: "/portfolios", label: "Khám phá" },
+  { href: "/portfolio/create", label: "Đăng tác phẩm" },
 ];
 
 export default function Navbar() {

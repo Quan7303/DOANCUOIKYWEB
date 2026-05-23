@@ -7,6 +7,7 @@ import { formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
 import { motion } from "framer-motion";
 import { Heart, Eye, ArrowLeft, Trash2, Send, MessageCircle } from "lucide-react";
+import { io, Socket } from "socket.io-client";
 import StateBlock from "../../components/StateBlock";
 import { useAuthStore } from "../../../store/useAuthStore";
 import type { PortfolioDetail } from "../../types/api";
@@ -42,6 +43,37 @@ export default function PortfolioDetailClient({
   const [likesCount, setLikesCount] = useState(0);
   const [commentContent, setCommentContent] = useState("");
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+
+  // Setup Socket.io
+  useEffect(() => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+    // Lấy origin từ apiUrl (ví dụ http://localhost:5000)
+    const socketUrl = apiUrl.replace("/api", "");
+    
+    const socket: Socket = io(socketUrl, {
+      transports: ["websocket", "polling"],
+    });
+
+    socket.on("connect", () => {
+      console.log("Connected to Socket.io:", socket.id);
+      socket.emit("join_portfolio", portfolioId);
+    });
+
+    socket.on("new_comment", (data: { comment: Comment; portfolioId: string }) => {
+      if (data.portfolioId === portfolioId) {
+        setComments((prev) => {
+          // Tránh duplicate comment (do chính user vừa post cũng sẽ nhận event broadcast)
+          if (prev.some((c) => c._id === data.comment._id)) return prev;
+          return [data.comment, ...prev];
+        });
+      }
+    });
+
+    return () => {
+      socket.emit("leave_portfolio", portfolioId);
+      socket.disconnect();
+    };
+  }, [portfolioId]);
 
   useEffect(() => {
     let isMounted = true;
