@@ -30,8 +30,8 @@ export default function Navbar() {
   const currentUser = isHydrated && isAuthenticated ? user : null;
   const signedIn = Boolean(currentUser);
   const createHref = signedIn
-    ? "/portfolio/create"
-    : "/login?next=/portfolio/create";
+    ? "/dashboard?tab=upload"
+    : `/login?next=${encodeURIComponent("/dashboard?tab=upload")}`;
   const themeLabel = hasHydrated && theme === "dark" ? "Che do sang" : "Che do toi";
 
   const handleLogout = async () => {
@@ -91,11 +91,11 @@ export default function Navbar() {
               {link.label}
             </Link>
           ))}
-          <Link href={createHref} className={linkClass("/portfolio/create")}>
+          <Link href={createHref} className={linkClass("/dashboard")}>
             Dang tac pham
           </Link>
           {signedIn && (
-            <Link href="/dashboard" className={linkClass("/dashboard")}>
+            <Link href="/dashboard?tab=profile" className={linkClass("/dashboard")}>
               Dashboard
             </Link>
           )}
@@ -128,7 +128,7 @@ export default function Navbar() {
             {signedIn ? (
               <>
                 <Link
-                  href="/dashboard"
+                  href="/dashboard?tab=profile"
                   className="flex max-w-[190px] items-center gap-2 rounded-md px-2 py-1.5 text-sm font-semibold hover:bg-surface-soft"
                 >
                   {currentUser?.avatar && currentUser.avatar !== "default-avatar.png" ? (
@@ -197,14 +197,14 @@ export default function Navbar() {
             ))}
             <Link
               href={createHref}
-              className={linkClass("/portfolio/create")}
+              className={linkClass("/dashboard")}
               onClick={() => setIsOpen(false)}
             >
               Dang tac pham
             </Link>
             {signedIn && (
               <Link
-                href="/dashboard"
+                href="/dashboard?tab=profile"
                 className={linkClass("/dashboard")}
                 onClick={() => setIsOpen(false)}
               >
@@ -216,7 +216,7 @@ export default function Navbar() {
               {signedIn ? (
                 <>
                   <Link
-                    href="/dashboard"
+                    href="/dashboard?tab=profile"
                     className="flex items-center gap-2 rounded-md px-3 py-3 text-sm font-semibold"
                     onClick={() => setIsOpen(false)}
                   >

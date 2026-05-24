@@ -22,6 +22,19 @@ const createPortfolio = async (req, res, next) => {
   }
 }
 
+const increasePortfolioView = async (req, res, next) => {
+  try {
+    const result = await portfolioService.increasePortfolioView(req.params.id)
+
+    res.status(200).json({
+      status: 'success',
+      data: result
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
 const getPortfolioList = async (req, res, next) => {
   try {
     const result = await portfolioService.getPortfolioList(req.query)
@@ -106,5 +119,6 @@ export const portfolioController = {
   getPortfolioDetail,
   updatePortfolio,
   deletePortfolio,
-  toggleLike
+  toggleLike,
+  increasePortfolioView
 }
