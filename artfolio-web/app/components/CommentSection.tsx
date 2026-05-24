@@ -231,14 +231,14 @@ export default function CommentSection({ portfolioId }: CommentSectionProps) {
             >
               <div className="flex items-start gap-3">
                 <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-sm font-bold text-white">
-                  {comment.user.avatar ? (
+                  {comment.user.avatar && comment.user.avatar !== "default-avatar.png" ? (
                     <img
                       src={comment.user.avatar}
                       alt={comment.user.name}
                       className="h-full w-full rounded-full object-cover"
                     />
                   ) : (
-                    comment.user.name.slice(0, 1)
+                    comment.user.name.slice(0, 1).toUpperCase()
                   )}
                 </div>
 

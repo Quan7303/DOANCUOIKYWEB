@@ -72,11 +72,17 @@ function PortfolioCard({ portfolio, index }: { portfolio: PortfolioSummary; inde
             {/* Hover Actions (Author & Stats) */}
             <div className="absolute inset-x-0 bottom-0 flex translate-y-4 items-end justify-between p-4 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
               <div className="flex items-center gap-2">
-                <img
-                  src={portfolio.user.avatar || "/next.svg"}
-                  alt={portfolio.user.name}
-                  className="h-8 w-8 rounded-full border-2 border-white object-cover"
-                />
+                {portfolio.user.avatar && portfolio.user.avatar !== "default-avatar.png" ? (
+                  <img
+                    src={portfolio.user.avatar}
+                    alt={portfolio.user.name}
+                    className="h-8 w-8 rounded-full border-2 border-white object-cover"
+                  />
+                ) : (
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full border-2 border-white bg-primary text-[10px] font-bold text-white uppercase">
+                    {portfolio.user.name.slice(0, 1)}
+                  </span>
+                )}
                 <span className="text-sm font-semibold text-white drop-shadow-md">
                   {portfolio.user.name}
                 </span>

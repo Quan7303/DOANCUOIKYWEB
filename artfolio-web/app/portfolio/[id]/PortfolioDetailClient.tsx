@@ -12,7 +12,9 @@ import {
   MessageCircle,
   Send,
   Trash2,
+  Edit3,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { io, Socket } from "socket.io-client";
 import StateBlock from "../../components/StateBlock";
 import { useAuthStore } from "../../store/useAuthStore";
@@ -78,10 +80,17 @@ export default function PortfolioDetailClient({
 }: PortfolioDetailClientProps) {
   const { user: currentUser, isAuthenticated, accessToken } = useAuthStore();
   const currentUserId = getUserId(currentUser);
+  const router = useRouter();
 
   const [portfolio, setPortfolio] = useState<PortfolioDetail | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  const isOwner = useMemo(() => {
+    if (!portfolio || !currentUserId) return false;
+    const ownerId = portfolio.user?._id;
+    return ownerId === currentUserId;
+  }, [portfolio, currentUserId]);
   const [errorMessage, setErrorMessage] = useState("");
   const [isLiked, setIsLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
@@ -310,6 +319,43 @@ export default function PortfolioDetailClient({
     }
   }
 
+  async function handleDeletePortfolio() {
+    setNotice("");
+
+    if (!accessToken) {
+      setNotice("Phiên đăng nhập đã hết hạn.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Bạn có chắc chắn muốn xóa tác phẩm này? Hành động này không thể hoàn tác!"
+    );
+    if (!confirmed) return;
+
+    try {
+      const response = await fetch(getApiUrl(`portfolios/${portfolioId}`), {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      const json = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(json?.message || "Không thể xóa tác phẩm.");
+      }
+
+      alert("Đã xóa tác phẩm thành công!");
+      router.push("/dashboard");
+      router.refresh();
+    } catch (error) {
+      setNotice(
+        error instanceof Error ? error.message : "Không thể xóa tác phẩm."
+      );
+    }
+  }
+
   if (isLoading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-background">
@@ -419,7 +465,7 @@ export default function PortfolioDetailClient({
             <section className="surface rounded-lg p-5">
               <div className="flex items-center gap-3 border-b border-border pb-5">
                 <Link href={`/profile/${portfolio.user._id}`} className="shrink-0">
-                  {portfolio.user.avatar ? (
+                  {portfolio.user.avatar && portfolio.user.avatar !== "default-avatar.png" ? (
                     <Image
                       src={portfolio.user.avatar}
                       alt={portfolio.user.name}
@@ -477,6 +523,24 @@ export default function PortfolioDetailClient({
                       />
                     ))}
                   </div>
+                </div>
+              )}
+
+              {isOwner && (
+                <div className="mt-6 flex flex-col gap-3 border-t border-border pt-6">
+                  <Link
+                    href={`/portfolio/edit/${portfolioId}`}
+                    className="btn btn-outline w-full h-11 flex items-center justify-center gap-2 text-sm font-bold transition-all hover:bg-primary/10 hover:text-primary"
+                  >
+                    <Edit3 className="h-4 w-4" /> Chỉnh sửa tác phẩm
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={handleDeletePortfolio}
+                    className="btn btn-outline border-danger text-danger hover:bg-danger/10 hover:text-danger w-full h-11 flex items-center justify-center gap-2 text-sm font-bold transition-all"
+                  >
+                    <Trash2 className="h-4 w-4" /> Xóa tác phẩm
+                  </button>
                 </div>
               )}
             </section>
@@ -546,7 +610,7 @@ export default function PortfolioDetailClient({
                             href={`/profile/${comment.user._id}`}
                             className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-sm font-bold text-white"
                           >
-                            {comment.user.avatar ? (
+                            {comment.user.avatar && comment.user.avatar !== "default-avatar.png" ? (
                               <img
                                 src={comment.user.avatar}
                                 alt={comment.user.name}

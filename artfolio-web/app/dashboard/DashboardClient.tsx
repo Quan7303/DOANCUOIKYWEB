@@ -236,7 +236,7 @@ export default function DashboardClient({
         <div className="grid min-w-0 gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
           <aside className="grid h-fit min-w-0 gap-4">
             <div className="surface grid gap-4 rounded-lg p-5">
-              {user.avatar ? (
+              {user.avatar && user.avatar !== "default-avatar.png" ? (
                 <Image
                   src={user.avatar}
                   alt={user.name}

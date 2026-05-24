@@ -27,6 +27,14 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async rewrites() {
+    return [
+      {
+        source: "/api/:path*",
+        destination: "http://127.0.0.1:5000/api/:path*",
+      },
+    ];
+  },
   // PWA support: manifest.json và offline page
   // Note: Tùy chế PWA, cần install next-pwa nếu muốn service worker tự động
   // Hiện tại dùng Next.js default PWA support qua manifest.json

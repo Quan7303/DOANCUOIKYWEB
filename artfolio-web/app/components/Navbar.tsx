@@ -7,6 +7,8 @@ import { Menu, Moon, Plus, Sun, UserRound, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuthStore } from "../store/useAuthStore";
 import { useThemeStore } from "../store/useThemeStore";
+import { useSocket } from "../hooks/useSocket";
+import NotificationDropdown from "./NotificationDropdown";
 
 const publicLinks = [
   { href: "/", label: "Trang chu" },
@@ -38,6 +40,27 @@ export default function Navbar() {
     router.push("/");
     router.refresh();
   };
+
+  const [latestSocketNotification, setLatestSocketNotification] = useState<any>(null);
+
+  const { socket } = useSocket({
+    userId: currentUser?.id || currentUser?._id,
+    enabled: signedIn,
+  });
+
+  useEffect(() => {
+    if (!socket || !signedIn) return;
+
+    function handleNotification(payload: any) {
+      setLatestSocketNotification(payload);
+    }
+
+    socket.on("send_notification", handleNotification);
+
+    return () => {
+      socket.off("send_notification", handleNotification);
+    };
+  }, [socket, signedIn]);
 
   useEffect(() => {
     if (!isHydrated || !accessToken || user) return;
@@ -93,6 +116,14 @@ export default function Navbar() {
             )}
           </button>
 
+          {signedIn && accessToken && (
+            <NotificationDropdown
+              accessToken={accessToken}
+              onUnreadCountChange={() => {}}
+              socketNotification={latestSocketNotification}
+            />
+          )}
+
           <div className="hidden items-center gap-2 md:flex">
             {signedIn ? (
               <>
@@ -100,7 +131,7 @@ export default function Navbar() {
                   href="/dashboard"
                   className="flex max-w-[190px] items-center gap-2 rounded-md px-2 py-1.5 text-sm font-semibold hover:bg-surface-soft"
                 >
-                  {currentUser?.avatar ? (
+                  {currentUser?.avatar && currentUser.avatar !== "default-avatar.png" ? (
                     <Image
                       src={currentUser.avatar}
                       alt={currentUser.name}
@@ -189,7 +220,7 @@ export default function Navbar() {
                     className="flex items-center gap-2 rounded-md px-3 py-3 text-sm font-semibold"
                     onClick={() => setIsOpen(false)}
                   >
-                    {currentUser?.avatar ? (
+                    {currentUser?.avatar && currentUser.avatar !== "default-avatar.png" ? (
                       <Image
                         src={currentUser.avatar}
                         alt={currentUser.name}

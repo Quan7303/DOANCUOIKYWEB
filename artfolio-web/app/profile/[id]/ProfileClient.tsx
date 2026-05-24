@@ -188,11 +188,17 @@ export default function ProfileClient({ userId }: ProfileClientProps) {
             <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
               <div className="relative h-32 w-32 shrink-0 md:h-40 md:w-40">
                 <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-primary to-accent blur-md opacity-50" />
-                <img
-                  src={user.avatar || "/next.svg"}
-                  alt={user.name}
-                  className="relative h-full w-full rounded-full border-4 border-surface object-cover shadow-lg"
-                />
+                {user.avatar && user.avatar !== "default-avatar.png" ? (
+                  <img
+                    src={user.avatar}
+                    alt={user.name}
+                    className="relative h-full w-full rounded-full border-4 border-surface object-cover shadow-lg"
+                  />
+                ) : (
+                  <div className="relative grid h-full w-full place-items-center rounded-full border-4 border-surface bg-primary text-4xl font-extrabold text-white shadow-lg">
+                    {user.name.slice(0, 1).toUpperCase()}
+                  </div>
+                )}
               </div>
 
               <div className="pt-2 sm:pt-0">

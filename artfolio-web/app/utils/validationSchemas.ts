@@ -26,9 +26,9 @@ export const profileActionSchema = z.object({
     .string()
     .min(2, "Ten phai co it nhat 2 ky tu")
     .max(60, "Ten toi da 60 ky tu"),
-  skills: z.string().optional().default(""),
-  experience: z.string().optional().default(""),
-  socialLinks: z.string().optional().default(""),
+  skills: z.string(),
+  experience: z.string(),
+  socialLinks: z.string(),
 });
 
 export type LoginFormValues = z.infer<typeof loginSchema>;

@@ -10,6 +10,7 @@ import { loginSchema, type LoginFormValues } from "../utils/validationSchemas";
 
 type LoginPageProps = {
   registered?: boolean;
+  resetSuccess?: boolean;
   nextPath?: string;
 };
 
@@ -23,6 +24,7 @@ function getSafeNextPath(value?: string) {
 
 export default function LoginPage({
   registered = false,
+  resetSuccess = false,
   nextPath,
 }: LoginPageProps) {
   const router = useRouter();
@@ -83,6 +85,12 @@ export default function LoginPage({
             </div>
           )}
 
+          {resetSuccess && !apiError && (
+            <div className="mb-4 rounded-lg border border-primary/30 bg-primary/10 p-3 text-sm font-semibold text-primary">
+              Đặt lại mật khẩu thành công. Vui lòng đăng nhập với mật khẩu mới.
+            </div>
+          )}
+
           <form className="grid gap-4" noValidate onSubmit={handleSubmit(onSubmit)}>
             <label className="field">
               <span className="label">Email</span>
@@ -98,7 +106,15 @@ export default function LoginPage({
             </label>
 
             <label className="field">
-              <span className="label">Mat khau</span>
+              <div className="flex items-center justify-between">
+                <span className="label">Mật khẩu</span>
+                <Link
+                  href="/forgot-password"
+                  className="text-xs font-semibold text-primary hover:underline"
+                >
+                  Quên mật khẩu?
+                </Link>
+              </div>
               <input
                 id="login-password"
                 className={`input${errors.password ? " input-error" : ""}`}
