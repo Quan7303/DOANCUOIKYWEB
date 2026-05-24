@@ -1,22 +1,28 @@
 "use client";
 
-import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useState } from "react";
-import { formatDistanceToNow } from "date-fns";
-import { vi } from "date-fns/locale";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Heart, Eye, ArrowLeft, Trash2, Send, MessageCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  CalendarDays,
+  Eye,
+  Heart,
+  MessageCircle,
+  Send,
+  Trash2,
+} from "lucide-react";
 import { io, Socket } from "socket.io-client";
 import StateBlock from "../../components/StateBlock";
-import { useAuthStore } from "../../../store/useAuthStore";
+import { useAuthStore } from "../../store/useAuthStore";
 import type { PortfolioDetail } from "../../types/api";
+import { getApiUrl, getSocketUrl } from "../../utils/apiConfig";
 
 type PortfolioDetailClientProps = {
   portfolioId: string;
 };
 
-// Kiểu bình luận trả về từ Backend
 type Comment = {
   _id: string;
   user: {
@@ -24,50 +30,93 @@ type Comment = {
     name: string;
     avatar?: string;
   };
-  content: string;
+  text: string;
   createdAt: string;
 };
+
+type RawComment = Comment & {
+  content?: string;
+};
+
+const categoryLabels: Record<string, string> = {
+  design: "Thiết kế",
+  art: "Nghệ thuật",
+  photo: "Nhiếp ảnh",
+  "3d": "3D",
+  other: "Khác",
+};
+
+function getUserId(user: { _id?: string; id?: string } | null | undefined) {
+  return user?._id || user?.id || "";
+}
+
+function normalizeComment(comment: RawComment): Comment {
+  return {
+    _id: comment._id,
+    user: comment.user,
+    text: comment.text || comment.content || "",
+    createdAt: comment.createdAt,
+  };
+}
+
+function formatDate(value?: string) {
+  if (!value) return "";
+
+  return new Intl.DateTimeFormat("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function getInitials(name: string) {
+  return name.trim().slice(0, 1).toUpperCase() || "A";
+}
 
 export default function PortfolioDetailClient({
   portfolioId,
 }: PortfolioDetailClientProps) {
   const { user: currentUser, isAuthenticated, accessToken } = useAuthStore();
-  
+  const currentUserId = getUserId(currentUser);
+
   const [portfolio, setPortfolio] = useState<PortfolioDetail | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
-  
-  // Tương tác
   const [isLiked, setIsLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
-  const [commentContent, setCommentContent] = useState("");
+  const [commentText, setCommentText] = useState("");
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [notice, setNotice] = useState("");
 
-  // Setup Socket.io
+  const categoryLabel = useMemo(() => {
+    if (!portfolio) return "";
+    return categoryLabels[portfolio.category] || portfolio.category;
+  }, [portfolio]);
+
   useEffect(() => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-    // Lấy origin từ apiUrl (ví dụ http://localhost:5000)
-    const socketUrl = apiUrl.replace("/api", "");
-    
-    const socket: Socket = io(socketUrl, {
+    const socket: Socket = io(getSocketUrl(), {
       transports: ["websocket", "polling"],
     });
 
     socket.on("connect", () => {
-      console.log("Connected to Socket.io:", socket.id);
       socket.emit("join_portfolio", portfolioId);
     });
 
-    socket.on("new_comment", (data: { comment: Comment; portfolioId: string }) => {
-      if (data.portfolioId === portfolioId) {
-        setComments((prev) => {
-          // Tránh duplicate comment (do chính user vừa post cũng sẽ nhận event broadcast)
-          if (prev.some((c) => c._id === data.comment._id)) return prev;
-          return [data.comment, ...prev];
+    socket.on(
+      "new_comment",
+      (payload: { comment: RawComment; portfolioId: string }) => {
+        if (payload.portfolioId !== portfolioId) return;
+
+        setComments((current) => {
+          if (current.some((comment) => comment._id === payload.comment._id)) {
+            return current;
+          }
+
+          return [normalizeComment(payload.comment), ...current];
         });
-      }
-    });
+      },
+    );
 
     return () => {
       socket.emit("leave_portfolio", portfolioId);
@@ -78,106 +127,117 @@ export default function PortfolioDetailClient({
   useEffect(() => {
     let isMounted = true;
 
-    async function loadData() {
+    async function loadPortfolio() {
       setIsLoading(true);
       setErrorMessage("");
 
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-        
-        // Fetch Portfolio Detail
-        const pRes = await fetch(`${apiUrl}/portfolios/${portfolioId}`, {
-          cache: "no-store",
-        });
+        const [portfolioResponse, commentResponse] = await Promise.all([
+          fetch(getApiUrl(`portfolios/${portfolioId}`), { cache: "no-store" }),
+          fetch(getApiUrl(`comments/portfolio/${portfolioId}`), {
+            cache: "no-store",
+          }),
+        ]);
 
-        if (!pRes.ok) {
-          throw new Error("Không tìm thấy tác phẩm hoặc có lỗi xảy ra");
+        if (!portfolioResponse.ok) {
+          throw new Error("Không tìm thấy tác phẩm hoặc dữ liệu không hợp lệ.");
         }
-        
-        const pJson = await pRes.json();
-        const data: PortfolioDetail = pJson.data;
 
-        // Fetch Comments
-        const cRes = await fetch(`${apiUrl}/comments/portfolio/${portfolioId}`, {
-          cache: "no-store",
-        });
-        
+        const portfolioJson = await portfolioResponse.json();
+        const portfolioData = portfolioJson.data as PortfolioDetail;
+
         if (!isMounted) return;
 
-        setPortfolio(data);
-        setLikesCount(data.likesCount || 0);
+        setPortfolio(portfolioData);
+        setLikesCount(portfolioData.likesCount || 0);
+        setIsLiked(
+          Boolean(currentUserId && portfolioData.likes?.includes(currentUserId)),
+        );
 
-        if (currentUser) {
-          const userId = currentUser._id || currentUser.id;
-          if (data.likes && data.likes.includes(userId)) {
-            setIsLiked(true);
-          }
+        if (commentResponse.ok) {
+          const commentJson = await commentResponse.json();
+          setComments((commentJson.data || []).map(normalizeComment));
+        } else {
+          setComments([]);
         }
-
-        if (cRes.ok) {
-          const cJson = await cRes.json();
-          if (cJson.status === "success") {
-            setComments(cJson.data || []);
-          }
-        }
-      } catch (err: any) {
-        if (isMounted) setErrorMessage(err.message);
+      } catch (error) {
+        if (!isMounted) return;
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Không thể tải dữ liệu tác phẩm.",
+        );
       } finally {
         if (isMounted) setIsLoading(false);
       }
     }
 
-    loadData();
+    loadPortfolio();
 
     return () => {
       isMounted = false;
     };
-  }, [portfolioId, currentUser]);
+  }, [portfolioId, currentUserId]);
 
-  const handleToggleLike = async () => {
-    if (!isAuthenticated || !currentUser) {
-      alert("Vui lòng đăng nhập để thích tác phẩm này.");
+  async function handleToggleLike() {
+    setNotice("");
+
+    if (!isAuthenticated || !accessToken) {
+      setNotice("Vui lòng đăng nhập để thích tác phẩm.");
       return;
     }
 
-    try {
-      // Optimistic Update
-      const newIsLiked = !isLiked;
-      setIsLiked(newIsLiked);
-      setLikesCount(prev => newIsLiked ? prev + 1 : prev - 1);
+    const nextLiked = !isLiked;
+    setIsLiked(nextLiked);
+    setLikesCount((current) => Math.max(0, current + (nextLiked ? 1 : -1)));
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-      const res = await fetch(`${apiUrl}/portfolios/${portfolioId}/like`, {
+    try {
+      const response = await fetch(getApiUrl(`portfolios/${portfolioId}/like`), {
         method: "POST",
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
       });
 
-      if (!res.ok) {
-        // Rollback if failed
-        setIsLiked(!newIsLiked);
-        setLikesCount(prev => !newIsLiked ? prev + 1 : prev - 1);
-        alert("Lỗi khi tương tác. Vui lòng thử lại.");
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
+      const json = await response.json().catch(() => null);
 
-  const handlePostComment = async () => {
-    if (!isAuthenticated || !currentUser) {
-      alert("Vui lòng đăng nhập để bình luận.");
+      if (!response.ok) {
+        throw new Error(json?.message || "Không thể cập nhật lượt thích.");
+      }
+
+      if (json?.data) {
+        setIsLiked(Boolean(json.data.isLiked));
+        setLikesCount(Number(json.data.likesCount || 0));
+      }
+    } catch (error) {
+      setIsLiked(!nextLiked);
+      setLikesCount((current) => Math.max(0, current + (nextLiked ? -1 : 1)));
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "Không thể cập nhật lượt thích.",
+      );
+    }
+  }
+
+  async function handlePostComment() {
+    setNotice("");
+
+    if (!isAuthenticated || !currentUser || !accessToken) {
+      setNotice("Vui lòng đăng nhập để bình luận.");
       return;
     }
 
-    if (!commentContent.trim()) return;
+    const text = commentText.trim();
+    if (text.length < 2) {
+      setNotice("Bình luận phải có ít nhất 2 ký tự.");
+      return;
+    }
 
     setIsSubmittingComment(true);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-      const res = await fetch(`${apiUrl}/comments`, {
+      const response = await fetch(getApiUrl("comments"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -185,69 +245,74 @@ export default function PortfolioDetailClient({
         },
         body: JSON.stringify({
           portfolioId,
-          content: commentContent,
+          text,
         }),
       });
 
-      if (res.ok) {
-        const json = await res.json();
-        // Backend trả về bình luận mới tạo trong json.data
-        const newComment = json.data;
-        if (newComment) {
-          // Gắn thêm info user hiện tại vào để UI hiện luôn không cần reload
-          const formattedComment: Comment = {
-            _id: newComment._id,
-            content: newComment.content,
-            createdAt: newComment.createdAt || new Date().toISOString(),
-            user: {
-              _id: currentUser._id || currentUser.id,
-              name: currentUser.name,
-              avatar: currentUser.avatar,
-            }
-          };
-          
-          setComments(prev => [formattedComment, ...prev]);
-          setCommentContent("");
-        }
-      } else {
-        alert("Có lỗi khi đăng bình luận.");
+      const json = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(json?.message || "Không thể gửi bình luận.");
       }
-    } catch (e) {
-      console.error(e);
-      alert("Có lỗi khi đăng bình luận.");
+
+      if (json?.data) {
+        setComments((current) => {
+          const newComment = normalizeComment(json.data);
+          if (current.some((comment) => comment._id === newComment._id)) {
+            return current;
+          }
+
+          return [newComment, ...current];
+        });
+      }
+
+      setCommentText("");
+    } catch (error) {
+      setNotice(
+        error instanceof Error ? error.message : "Không thể gửi bình luận.",
+      );
     } finally {
       setIsSubmittingComment(false);
     }
-  };
+  }
 
-  const handleDeleteComment = async (commentId: string) => {
-    const confirmDelete = window.confirm("Bạn có chắc chắn muốn xóa bình luận này?");
-    if (!confirmDelete) return;
+  async function handleDeleteComment(commentId: string) {
+    setNotice("");
+
+    if (!accessToken) {
+      setNotice("Phiên đăng nhập đã hết hạn.");
+      return;
+    }
+
+    const confirmed = window.confirm("Bạn muốn xóa bình luận này?");
+    if (!confirmed) return;
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-      const res = await fetch(`${apiUrl}/comments/${commentId}`, {
+      const response = await fetch(getApiUrl(`comments/${commentId}`), {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
       });
 
-      if (res.ok) {
-        // Xóa khỏi UI
-        setComments(prev => prev.filter(c => c._id !== commentId));
-      } else {
-        alert("Không thể xóa bình luận này.");
+      if (!response.ok) {
+        const json = await response.json().catch(() => null);
+        throw new Error(json?.message || "Không thể xóa bình luận.");
       }
+
+      setComments((current) =>
+        current.filter((comment) => comment._id !== commentId),
+      );
     } catch (error) {
-      console.error(error);
-      alert("Lỗi khi xóa bình luận.");
+      setNotice(
+        error instanceof Error ? error.message : "Không thể xóa bình luận.",
+      );
     }
-  };
+  }
 
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-background flex items-center justify-center">
+      <main className="flex min-h-screen items-center justify-center bg-background">
         <StateBlock type="loading" title="Đang tải tác phẩm..." />
       </main>
     );
@@ -255,13 +320,13 @@ export default function PortfolioDetailClient({
 
   if (errorMessage || !portfolio) {
     return (
-      <main className="min-h-screen bg-background flex items-center justify-center">
+      <main className="flex min-h-screen items-center justify-center bg-background">
         <StateBlock
           type="error"
           title="Không tìm thấy tác phẩm"
           description={errorMessage || "Tác phẩm không tồn tại hoặc đã bị xóa."}
           actionLabel="Quay lại khám phá"
-          actionHref="/"
+          actionHref="/portfolios"
         />
       </main>
     );
@@ -269,215 +334,265 @@ export default function PortfolioDetailClient({
 
   return (
     <main className="min-h-screen bg-background">
-      {/* Sticky Top Bar (Back Button) */}
-      <div className="sticky top-0 z-40 border-b border-border/50 bg-surface/80 backdrop-blur-lg">
-        <div className="app-container flex h-16 items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 text-sm font-semibold text-muted hover:text-foreground transition-colors">
-            <ArrowLeft className="h-4 w-4" /> Quay lại
+      <div className="sticky top-0 z-40 border-b border-border bg-surface/90 backdrop-blur">
+        <div className="app-container flex h-16 items-center justify-between gap-4">
+          <Link
+            href="/portfolios"
+            className="inline-flex items-center gap-2 text-sm font-bold text-muted transition hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Khám phá
           </Link>
+
           <div className="flex items-center gap-3">
-             <span className="flex items-center gap-1.5 text-sm font-semibold text-muted">
-               <Eye className="h-4 w-4" /> {portfolio.views?.toLocaleString("vi-VN") || 0}
-             </span>
-             <button
-               onClick={handleToggleLike}
-               className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-all ${
-                 isLiked ? "bg-danger/10 text-danger hover:bg-danger/20" : "bg-surface-soft text-muted hover:text-foreground hover:bg-border"
-               }`}
-             >
-               <motion.div animate={{ scale: isLiked ? [1, 1.4, 1] : 1 }} transition={{ duration: 0.3 }}>
-                 <Heart className="h-4 w-4" fill={isLiked ? "currentColor" : "none"} />
-               </motion.div>
-               {likesCount.toLocaleString("vi-VN")}
-             </button>
+            <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted">
+              <Eye className="h-4 w-4" />
+              {portfolio.views?.toLocaleString("vi-VN") || 0}
+            </span>
+            <button
+              type="button"
+              onClick={handleToggleLike}
+              className={`inline-flex min-h-10 items-center gap-2 rounded-lg border px-3 text-sm font-bold transition ${
+                isLiked
+                  ? "border-danger/25 bg-danger/10 text-danger"
+                  : "border-border bg-surface-soft text-muted hover:text-foreground"
+              }`}
+            >
+              <Heart
+                className="h-4 w-4"
+                fill={isLiked ? "currentColor" : "none"}
+              />
+              {likesCount.toLocaleString("vi-VN")}
+            </button>
           </div>
         </div>
       </div>
 
       <div className="app-container py-8 lg:py-12">
-        <div className="grid gap-12 lg:grid-cols-[1fr_380px] xl:gap-20">
-          
-          {/* Cột trái: Ảnh tràn viền cực nét */}
-          <div className="flex flex-col gap-6">
-            <motion.h1 
-              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} 
-              className="text-4xl font-extrabold sm:text-5xl"
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px] xl:gap-12">
+          <div className="grid gap-6">
+            <motion.header
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="grid gap-4"
             >
-              {portfolio.title}
-            </motion.h1>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="badge border-primary/30 text-primary">
+                  {categoryLabel}
+                </span>
+                {portfolio.tags?.slice(0, 4).map((tag) => (
+                  <span key={tag} className="badge">
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+              <h1 className="text-3xl font-extrabold leading-tight sm:text-5xl">
+                {portfolio.title}
+              </h1>
+              <p className="max-w-3xl text-base leading-7 text-muted">
+                {portfolio.description || "Tác giả chưa thêm mô tả cho tác phẩm này."}
+              </p>
+            </motion.header>
 
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }}
-              className="overflow-hidden rounded-2xl border border-border/50 shadow-2xl"
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.05 }}
+              className="overflow-hidden rounded-lg border border-border bg-surface"
             >
-              {portfolio.images.map((img, idx) => (
-                <div key={idx} className="relative w-full">
+              {portfolio.images.map((image, index) => (
+                <div key={`${image}-${index}`} className="relative bg-surface-soft">
                   <Image
-                    src={img}
-                    alt={`${portfolio.title} - ảnh ${idx + 1}`}
-                    width={1200}
-                    height={800}
+                    src={image}
+                    alt={`${portfolio.title} - ảnh ${index + 1}`}
+                    width={1400}
+                    height={900}
+                    priority={index === 0}
                     className="h-auto w-full object-cover"
-                    priority={idx === 0}
                   />
                 </div>
               ))}
             </motion.div>
           </div>
 
-          {/* Cột phải: Sticky Sidebar */}
-          <div className="relative">
-            <div className="sticky top-24 flex flex-col gap-8">
-              
-              {/* Tác giả & Info */}
-              <motion.section 
-                initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}
-                className="surface rounded-2xl p-6"
-              >
-                <div className="flex items-center gap-4 border-b border-border/50 pb-6">
-                  <Link href={`/profile/${portfolio.user._id}`}>
-                    <img
-                      src={portfolio.user.avatar || "/next.svg"}
+          <aside className="grid h-fit gap-5 lg:sticky lg:top-24">
+            <section className="surface rounded-lg p-5">
+              <div className="flex items-center gap-3 border-b border-border pb-5">
+                <Link href={`/profile/${portfolio.user._id}`} className="shrink-0">
+                  {portfolio.user.avatar ? (
+                    <Image
+                      src={portfolio.user.avatar}
                       alt={portfolio.user.name}
-                      className="h-16 w-16 rounded-full border-2 border-border object-cover transition-transform hover:scale-105"
+                      width={56}
+                      height={56}
+                      className="h-14 w-14 rounded-full object-cover"
                     />
+                  ) : (
+                    <span className="grid h-14 w-14 place-items-center rounded-full bg-primary text-lg font-bold text-white">
+                      {getInitials(portfolio.user.name)}
+                    </span>
+                  )}
+                </Link>
+                <div className="min-w-0">
+                  <Link
+                    href={`/profile/${portfolio.user._id}`}
+                    className="block truncate font-bold hover:text-primary"
+                  >
+                    {portfolio.user.name}
                   </Link>
-                  <div>
-                    <h3 className="text-lg font-bold">
-                      <Link href={`/profile/${portfolio.user._id}`} className="hover:text-primary transition-colors">
-                        {portfolio.user.name}
-                      </Link>
-                    </h3>
-                    <p className="text-sm text-muted">
-                      Ngày đăng: {new Date(portfolio.createdAt).toLocaleDateString("vi-VN")}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="pt-6">
-                  <h4 className="text-sm font-bold uppercase tracking-wider text-muted mb-3">Mô tả</h4>
-                  <p className="text-foreground leading-relaxed">
-                    {portfolio.description || "Tác giả không để lại mô tả."}
+                  <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-muted">
+                    <CalendarDays className="h-4 w-4" />
+                    {formatDate(portfolio.createdAt)}
                   </p>
                 </div>
+              </div>
 
-                <div className="mt-6 flex flex-wrap gap-2">
-                  <span className="badge border-primary/30 text-primary">{portfolio.category}</span>
-                  {portfolio.tags?.map((tag) => (
-                    <span key={tag} className="badge">#{tag}</span>
-                  ))}
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <div className="rounded-lg border border-border bg-surface-soft p-3 text-center">
+                  <strong className="block text-xl">
+                    {portfolio.views?.toLocaleString("vi-VN") || 0}
+                  </strong>
+                  <span className="text-xs font-semibold text-muted">Lượt xem</span>
                 </div>
+                <div className="rounded-lg border border-border bg-surface-soft p-3 text-center">
+                  <strong className="block text-xl">
+                    {likesCount.toLocaleString("vi-VN")}
+                  </strong>
+                  <span className="text-xs font-semibold text-muted">Lượt thích</span>
+                </div>
+              </div>
 
-                {portfolio.colors && portfolio.colors.length > 0 && (
-                  <div className="mt-6">
-                    <h4 className="text-sm font-bold uppercase tracking-wider text-muted mb-3">Bảng Màu</h4>
-                    <div className="flex gap-2">
-                      {portfolio.colors.map((color) => (
-                        <div
-                          key={color}
-                          className="h-8 w-full rounded-md shadow-sm border border-border"
-                          style={{ backgroundColor: color }}
-                          title={color}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </motion.section>
-
-              {/* Bình luận */}
-              <motion.section 
-                initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }}
-                className="surface rounded-2xl p-6"
-              >
-                <h3 className="flex items-center gap-2 text-xl font-bold mb-6">
-                  <MessageCircle className="h-5 w-5" /> Bình luận ({comments.length})
-                </h3>
-
-                {isAuthenticated ? (
-                  <div className="flex gap-3 mb-8">
-                    <img
-                      src={currentUser?.avatar || "/next.svg"}
-                      alt="Avatar"
-                      className="h-10 w-10 shrink-0 rounded-full border border-border object-cover"
-                    />
-                    <div className="flex-1">
-                      <textarea
-                        rows={2}
-                        className="w-full rounded-xl border border-border bg-surface-soft px-4 py-3 text-sm placeholder-muted outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                        placeholder="Bạn nghĩ gì về tác phẩm này?"
-                        value={commentContent}
-                        onChange={(e) => setCommentContent(e.target.value)}
+              {portfolio.colors?.length > 0 && (
+                <div className="mt-5">
+                  <p className="mb-3 text-sm font-bold uppercase text-muted">
+                    Bảng màu
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {portfolio.colors.map((color) => (
+                      <div
+                        key={color}
+                        className="h-10 rounded-lg border border-border"
+                        style={{ backgroundColor: color }}
+                        title={color}
                       />
-                      <div className="mt-2 flex justify-end">
-                        <button
-                          onClick={handlePostComment}
-                          disabled={!commentContent.trim() || isSubmittingComment}
-                          className="btn btn-primary h-9 px-4 rounded-lg flex items-center gap-2"
-                        >
-                          <Send className="h-4 w-4" /> {isSubmittingComment ? "Đang gửi..." : "Gửi"}
-                        </button>
-                      </div>
-                    </div>
+                    ))}
                   </div>
+                </div>
+              )}
+            </section>
+
+            <section className="surface rounded-lg p-5">
+              <div className="mb-5 flex items-center justify-between gap-3">
+                <h2 className="inline-flex items-center gap-2 text-lg font-bold">
+                  <MessageCircle className="h-5 w-5" />
+                  Bình luận
+                </h2>
+                <span className="text-sm font-semibold text-muted">
+                  {comments.length}
+                </span>
+              </div>
+
+              {notice && (
+                <p className="mb-4 rounded-lg border border-danger/30 bg-danger/10 p-3 text-sm font-semibold text-danger">
+                  {notice}
+                </p>
+              )}
+
+              {isAuthenticated ? (
+                <div className="mb-5 grid gap-3">
+                  <textarea
+                    rows={3}
+                    className="input min-h-24 resize-none py-3"
+                    placeholder="Viết bình luận..."
+                    value={commentText}
+                    onChange={(event) => setCommentText(event.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={handlePostComment}
+                    disabled={isSubmittingComment || !commentText.trim()}
+                    className="btn btn-primary justify-self-end"
+                  >
+                    <Send className="h-4 w-4" />
+                    {isSubmittingComment ? "Đang gửi..." : "Gửi"}
+                  </button>
+                </div>
+              ) : (
+                <div className="mb-5 rounded-lg border border-border bg-surface-soft p-4 text-sm text-muted">
+                  Vui lòng{" "}
+                  <Link href="/login" className="font-bold text-primary">
+                    đăng nhập
+                  </Link>{" "}
+                  để bình luận.
+                </div>
+              )}
+
+              <div className="grid max-h-[520px] gap-3 overflow-y-auto pr-1">
+                {comments.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-border p-5 text-center text-sm text-muted">
+                    Chưa có bình luận nào.
+                  </p>
                 ) : (
-                  <div className="mb-8 rounded-xl border border-border bg-surface-soft p-4 text-center">
-                    <p className="text-sm text-muted">Vui lòng <Link href="/login" className="text-primary font-bold hover:underline">đăng nhập</Link> để bình luận.</p>
-                  </div>
-                )}
+                  comments.map((comment) => {
+                    const isMyComment = currentUserId === comment.user._id;
 
-                <div className="flex flex-col gap-6 max-h-[500px] overflow-y-auto pr-2 hide-scrollbar">
-                  {comments.length === 0 ? (
-                    <p className="text-center text-sm text-muted">Chưa có bình luận nào.</p>
-                  ) : (
-                    comments.map((comment) => {
-                      const isMyComment = currentUser && (currentUser._id === comment.user._id || currentUser.id === comment.user._id);
-                      return (
-                        <div key={comment._id} className="group flex gap-3">
-                          <Link href={`/profile/${comment.user._id}`}>
-                            <img
-                              src={comment.user.avatar || "/next.svg"}
-                              alt={comment.user.name}
-                              className="h-10 w-10 shrink-0 rounded-full border border-border object-cover"
-                            />
-                          </Link>
-                          <div className="flex-1 rounded-2xl rounded-tl-none bg-surface-soft p-4 relative">
-                            <div className="mb-1 flex items-baseline justify-between">
-                              <Link href={`/profile/${comment.user._id}`}>
-                                <strong className="text-sm font-bold hover:text-primary transition-colors">
-                                  {comment.user.name}
-                                </strong>
-                              </Link>
-                              <span className="text-xs text-muted">
-                                {formatDistanceToNow(new Date(comment.createdAt), {
-                                  addSuffix: true,
-                                  locale: vi,
-                                })}
-                              </span>
-                            </div>
-                            <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">
-                              {comment.content}
-                            </p>
-
-                            {/* Nút xóa bình luận */}
-                            {isMyComment && (
-                              <button
-                                onClick={() => handleDeleteComment(comment._id)}
-                                className="absolute -right-2 -top-2 rounded-full bg-danger text-white p-1.5 shadow-md opacity-0 transition-all hover:scale-110 group-hover:opacity-100"
-                                title="Xóa bình luận"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </button>
+                    return (
+                      <article
+                        key={comment._id}
+                        className="group rounded-lg border border-border bg-surface-soft p-4"
+                      >
+                        <div className="flex items-start gap-3">
+                          <Link
+                            href={`/profile/${comment.user._id}`}
+                            className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-sm font-bold text-white"
+                          >
+                            {comment.user.avatar ? (
+                              <img
+                                src={comment.user.avatar}
+                                alt={comment.user.name}
+                                className="h-full w-full rounded-full object-cover"
+                              />
+                            ) : (
+                              getInitials(comment.user.name)
                             )}
+                          </Link>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <Link
+                                  href={`/profile/${comment.user._id}`}
+                                  className="font-bold hover:text-primary"
+                                >
+                                  {comment.user.name}
+                                </Link>
+                                <p className="text-xs text-muted">
+                                  {formatDate(comment.createdAt)}
+                                </p>
+                              </div>
+                              {isMyComment && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteComment(comment._id)}
+                                  className="rounded-md p-1.5 text-muted opacity-0 transition hover:bg-danger/10 hover:text-danger group-hover:opacity-100"
+                                  title="Xóa bình luận"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              )}
+                            </div>
+                            <p className="mt-2 whitespace-pre-wrap text-sm leading-6">
+                              {comment.text}
+                            </p>
                           </div>
                         </div>
-                      );
-                    })
-                  )}
-                </div>
-              </motion.section>
-            </div>
-          </div>
+                      </article>
+                    );
+                  })
+                )}
+              </div>
+            </section>
+          </aside>
         </div>
       </div>
     </main>

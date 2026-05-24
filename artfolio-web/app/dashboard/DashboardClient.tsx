@@ -4,7 +4,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { updateProfileAction } from "../actions/profileActions";
 import ExportPdfButton from "../components/ExportPdfButton";
 import ProfileHeader from "./components/ProfileHeader";
 import DashboardStats from "./components/DashboardStats";
@@ -19,6 +18,7 @@ import {
   type ProfileActionValues,
 } from "../utils/validationSchemas";
 import DashboardUploadForm from "./DashboardUploadForm";
+import { api } from "../utils/api";
 
 type DashboardClientProps = {
   user: AuthUser;
@@ -33,20 +33,6 @@ const categoryLabels: Record<string, string> = {
   other: "Other",
 };
 
-const LOCAL_PORTFOLIOS_KEY = "artfolio-local-portfolios";
-const LIKE_COUNTS_KEY = "artfolio-like-counts";
-
-function readLikeCounts(): Record<string, number> {
-  if (typeof window === "undefined") return {};
-
-  try {
-    const raw = localStorage.getItem(LIKE_COUNTS_KEY);
-    return raw ? (JSON.parse(raw) as Record<string, number>) : {};
-  } catch {
-    return {};
-  }
-}
-
 function getPortfolioId(portfolio: PortfolioDetail) {
   const item = portfolio as PortfolioDetail & {
     id?: string;
@@ -56,31 +42,11 @@ function getPortfolioId(portfolio: PortfolioDetail) {
   return item._id || item.id || item.slug || portfolio.title;
 }
 
-function applyLocalLikeCounts(items: PortfolioDetail[]) {
-  const likeCounts = readLikeCounts();
-
-  return items.map((item) => {
-    const portfolioId = getPortfolioId(item);
-
-    if (typeof likeCounts[portfolioId] !== "number") {
-      return item;
-    }
-
-    return {
-      ...item,
-      likesCount: likeCounts[portfolioId],
-    };
-  });
-}
-
-function mergePortfolios(
-  localPortfolios: PortfolioDetail[],
-  basePortfolios: PortfolioDetail[]
-) {
+function mergePortfolios(items: PortfolioDetail[]) {
   const existedIds = new Set<string>();
   const result: PortfolioDetail[] = [];
 
-  [...localPortfolios, ...basePortfolios].forEach((item) => {
+  items.forEach((item) => {
     const id = getPortfolioId(item);
 
     if (existedIds.has(id)) return;
@@ -92,20 +58,40 @@ function mergePortfolios(
   return result;
 }
 
-function readLocalPortfolios(): PortfolioDetail[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = localStorage.getItem(LOCAL_PORTFOLIOS_KEY);
-    return raw ? (JSON.parse(raw) as PortfolioDetail[]) : [];
-  } catch {
-    return [];
-  }
+function parseCsv(value: string) {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
-function saveLocalPortfolios(items: PortfolioDetail[]) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(LOCAL_PORTFOLIOS_KEY, JSON.stringify(items));
+function parseLines(value: string) {
+  return value
+    .split("\n")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parseSocialLinks(value?: string) {
+  const links = parseCsv(value || "");
+
+  return {
+    github: links.find((item) => item.includes("github.com")) || "",
+    instagram: links.find((item) => item.includes("instagram.com")) || "",
+    behance: links.find((item) => item.includes("behance.net")) || "",
+    linkedin: links.find((item) => item.includes("linkedin.com")) || "",
+  };
+}
+
+function formatSocialLinks(user: AuthUser) {
+  return [
+    user.socialLinks?.github,
+    user.socialLinks?.instagram,
+    user.socialLinks?.behance,
+    user.socialLinks?.linkedin,
+  ]
+    .filter(Boolean)
+    .join(", ");
 }
 
 export default function DashboardClient({
@@ -115,27 +101,9 @@ export default function DashboardClient({
   const [portfolios, setPortfolios] =
     useState<PortfolioDetail[]>(myPortfolios);
 
-useEffect(() => {
-  const syncPortfolios = () => {
-    const localPortfolios = readLocalPortfolios();
-    const merged = mergePortfolios(localPortfolios, myPortfolios);
-    const portfoliosWithLatestLikes = applyLocalLikeCounts(merged);
-
-    setPortfolios(portfoliosWithLatestLikes);
-  };
-
-  syncPortfolios();
-
-  window.addEventListener("focus", syncPortfolios);
-  window.addEventListener("storage", syncPortfolios);
-  window.addEventListener("artfolio-like-updated", syncPortfolios);
-
-  return () => {
-    window.removeEventListener("focus", syncPortfolios);
-    window.removeEventListener("storage", syncPortfolios);
-    window.removeEventListener("artfolio-like-updated", syncPortfolios);
-  };
-}, [myPortfolios]);
+  useEffect(() => {
+    setPortfolios(myPortfolios);
+  }, [myPortfolios]);
   const [toastMessage, setToastMessage] = useState("");
   const [activeTab, setActiveTab] = useState<
     "profile" | "upload" | "portfolios" | "export"
@@ -163,11 +131,11 @@ useEffect(() => {
   } = useForm<ProfileActionValues>({
     resolver: zodResolver(profileActionSchema),
     defaultValues: {
-      userId: user.id,
+      userId: user._id || user.id,
       name: user.name,
-      skills: "",
-      experience: "",
-      socialLinks: "",
+      skills: user.skills?.join(", ") || "",
+      experience: user.experience?.join("\n") || "",
+      socialLinks: formatSocialLinks(user),
     },
   });
 
@@ -175,30 +143,34 @@ useEffect(() => {
     setIsSubmitting(true);
     setSubmitResult(null);
 
-    const formData = new FormData();
-    Object.entries(values).forEach(([key, val]) =>
-      formData.append(key, val ?? "")
-    );
+    try {
+      await api.put(`/api/users/${values.userId}`, {
+        name: values.name,
+        skills: parseCsv(values.skills),
+        experience: parseLines(values.experience),
+        socialLinks: parseSocialLinks(values.socialLinks),
+      });
 
-    const result = await updateProfileAction(formData);
-    setSubmitResult(result);
-    setIsSubmitting(false);
+      setSubmitResult({
+        ok: true,
+        message: "Cập nhật hồ sơ thành công.",
+      });
+    } catch (error) {
+      setSubmitResult({
+        ok: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Backend từ chối cập nhật hồ sơ.",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
 
   const handleCreatedPortfolio = (portfolio: PortfolioDetail) => {
-    const currentLocalPortfolios = readLocalPortfolios();
-
-    const updatedLocalPortfolios = mergePortfolios(
-      [portfolio],
-      currentLocalPortfolios
-    );
-
-    saveLocalPortfolios(updatedLocalPortfolios);
-
-    setPortfolios((current) =>
-      applyLocalLikeCounts(mergePortfolios(updatedLocalPortfolios, current))
-    );
+    setPortfolios((current) => mergePortfolios([portfolio, ...current]));
 
     setToastMessage("Đăng tác phẩm thành công.");
     setActiveTab("portfolios");
@@ -212,9 +184,9 @@ useEffect(() => {
     name: user.name,
     email: user.email,
     title: user.role === "admin" ? "Admin · Artfolio" : "Creative Portfolio",
-    skills: [],
-    experience: [],
-    socialLinks: [],
+    skills: user.skills || [],
+    experience: user.experience || [],
+    socialLinks: parseCsv(formatSocialLinks(user)),
     works: portfolios.map((p) => ({
       title: p.title,
       category: p.category,

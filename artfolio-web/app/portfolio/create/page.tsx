@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm, Controller } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Upload, X, Loader2, Sparkles } from "lucide-react";
-import { useAuthStore } from "../../../store/useAuthStore";
+import { useAuthStore } from "../../store/useAuthStore";
+import { getApiUrl } from "../../utils/apiConfig";
 
 const createSchema = z.object({
   title: z.string().min(5, "Tiêu đề ít nhất 5 ký tự").max(100, "Tối đa 100 ký tự"),
@@ -19,8 +20,7 @@ type CreateFormValues = z.infer<typeof createSchema>;
 
 export default function CreatePortfolioPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
-  const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+  const { isAuthenticated, isHydrated, accessToken } = useAuthStore();
 
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -30,12 +30,19 @@ export default function CreatePortfolioPage() {
   
   // AI State
   const [aiAnalysis, setAiAnalysis] = useState("");
+  const [aiError, setAiError] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  const { register, handleSubmit, formState: { errors }, control } = useForm<CreateFormValues>({
+  const { register, handleSubmit, formState: { errors } } = useForm<CreateFormValues>({
     resolver: zodResolver(createSchema),
     defaultValues: { category: "design", tags: "" }
   });
+
+  useEffect(() => {
+    if (isHydrated && !isAuthenticated) {
+      router.replace("/login?next=/portfolio/create");
+    }
+  }, [isHydrated, isAuthenticated, router]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -57,15 +64,15 @@ export default function CreatePortfolioPage() {
   };
 
   const analyzePaletteWithAI = async () => {
-    if (!token) return;
+    if (!accessToken) return;
     setIsAnalyzing(true);
+    setAiError("");
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-      const res = await fetch(`${apiUrl}/ai/analyze-palette`, {
+      const res = await fetch(getApiUrl("ai/analyze-palette"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
+          "Authorization": `Bearer ${accessToken}`
         },
         body: JSON.stringify({ colors })
       });
@@ -74,18 +81,18 @@ export default function CreatePortfolioPage() {
       if (res.ok) {
         setAiAnalysis(data.analysis);
       } else {
-        alert(data.message || "Lỗi khi gọi AI");
+        setAiError(data.message || "Không thể phân tích bảng màu.");
       }
     } catch (e) {
-      alert("Lỗi khi kết nối với AI Server");
+      setAiError("Không kết nối được AI server.");
     } finally {
       setIsAnalyzing(false);
     }
   };
 
   const onSubmit = async (values: CreateFormValues) => {
-    if (!isAuthenticated || !token) {
-      setApiError("Vui lòng đăng nhập để đăng tác phẩm.");
+    if (!isAuthenticated || !accessToken) {
+      router.replace("/login?next=/portfolio/create");
       return;
     }
 
@@ -115,11 +122,10 @@ export default function CreatePortfolioPage() {
       // File ảnh
       formData.append("image", imageFile);
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-      const res = await fetch(`${apiUrl}/portfolios`, {
+      const res = await fetch(getApiUrl("portfolios"), {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${token}`
+          "Authorization": `Bearer ${accessToken}`
         },
         body: formData,
       });
@@ -224,6 +230,11 @@ export default function CreatePortfolioPage() {
                   />
                 ))}
               </div>
+              {aiError && (
+                <p className="mt-3 rounded-lg border border-danger/30 bg-danger/10 p-3 text-sm font-semibold text-danger">
+                  {aiError}
+                </p>
+              )}
               
               {/* Kết quả AI */}
               {aiAnalysis && (

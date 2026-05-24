@@ -2,61 +2,83 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { Menu, Moon, Plus, Sun, UserRound, X } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useAuthStore } from "../store/useAuthStore";
 import { useThemeStore } from "../store/useThemeStore";
 
-const navLinks = [
-  { href: "/", label: "Trang chủ" },
-  { href: "/portfolios", label: "Khám phá" },
-  { href: "/portfolio/create", label: "Đăng tác phẩm" },
+const publicLinks = [
+  { href: "/", label: "Trang chu" },
+  { href: "/portfolios", label: "Kham pha" },
 ];
+
+function isActive(pathname: string, href: string) {
+  if (href === "/") return pathname === "/";
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 export default function Navbar() {
   const router = useRouter();
+  const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const { theme, hasHydrated, toggleTheme } = useThemeStore();
-  const { user, isAuthenticated, logout } = useAuthStore();
-  const themeLabel = hasHydrated && theme === "dark" ? "Chế độ sáng" : "Chế độ tối";
+  const { user, isAuthenticated, isHydrated, accessToken, fetchMe, logout } =
+    useAuthStore();
+  const currentUser = isHydrated && isAuthenticated ? user : null;
+  const signedIn = Boolean(currentUser);
+  const createHref = signedIn
+    ? "/portfolio/create"
+    : "/login?next=/portfolio/create";
+  const themeLabel = hasHydrated && theme === "dark" ? "Che do sang" : "Che do toi";
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     setIsOpen(false);
     router.push("/");
+    router.refresh();
   };
 
-  const allLinks = isAuthenticated
-    ? [...navLinks, { href: "/dashboard", label: "Dashboard" }]
-    : navLinks;
+  useEffect(() => {
+    if (!isHydrated || !accessToken || user) return;
+    fetchMe();
+  }, [accessToken, fetchMe, isHydrated, user]);
+
+  const linkClass = (href: string) =>
+    [
+      "rounded-md px-3 py-2 text-sm font-semibold transition",
+      isActive(pathname, href)
+        ? "bg-surface-soft text-foreground"
+        : "text-muted hover:bg-surface-soft hover:text-foreground",
+    ].join(" ");
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-surface/95 backdrop-blur">
       <nav className="app-container flex h-16 items-center justify-between gap-4">
-        {/* Logo */}
-        <Link href="/" className="flex items-center gap-2 font-bold">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-sm text-white">
+        <Link href="/" className="flex min-w-0 items-center gap-2 font-bold">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-primary text-sm text-white">
             A
           </span>
-          <span>Artfolio</span>
+          <span className="truncate">Artfolio</span>
         </Link>
 
-        {/* Desktop nav links */}
         <div className="hidden items-center gap-1 md:flex">
-          {allLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="rounded-lg px-3 py-2 text-sm font-semibold text-muted hover:bg-surface-soft hover:text-foreground"
-            >
+          {publicLinks.map((link) => (
+            <Link key={link.href} href={link.href} className={linkClass(link.href)}>
               {link.label}
             </Link>
           ))}
+          <Link href={createHref} className={linkClass("/portfolio/create")}>
+            Dang tac pham
+          </Link>
+          {signedIn && (
+            <Link href="/dashboard" className={linkClass("/dashboard")}>
+              Dashboard
+            </Link>
+          )}
         </div>
 
-        {/* Right actions */}
         <div className="flex items-center gap-2">
-          {/* Theme toggle */}
           <button
             type="button"
             onClick={toggleTheme}
@@ -64,124 +86,147 @@ export default function Navbar() {
             aria-label={themeLabel}
             title={themeLabel}
           >
-            <span aria-hidden>{hasHydrated && theme === "dark" ? "☼" : "☾"}</span>
+            {hasHydrated && theme === "dark" ? (
+              <Sun className="h-4 w-4" aria-hidden />
+            ) : (
+              <Moon className="h-4 w-4" aria-hidden />
+            )}
           </button>
 
-          {/* Auth section – desktop */}
           <div className="hidden items-center gap-2 md:flex">
-            {isAuthenticated && user ? (
+            {signedIn ? (
               <>
-                {/* Avatar + tên */}
                 <Link
                   href="/dashboard"
-                  className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-semibold hover:bg-surface-soft"
+                  className="flex max-w-[190px] items-center gap-2 rounded-md px-2 py-1.5 text-sm font-semibold hover:bg-surface-soft"
                 >
-                  {user.avatar ? (
+                  {currentUser?.avatar ? (
                     <Image
-                      src={user.avatar}
-                      alt={user.name}
+                      src={currentUser.avatar}
+                      alt={currentUser.name}
                       width={28}
                       height={28}
-                      className="rounded-full"
+                      className="h-7 w-7 rounded-full object-cover"
                     />
                   ) : (
-                    <span className="grid h-7 w-7 place-items-center rounded-full bg-primary text-xs font-bold text-white">
-                      {user.name.slice(0, 1)}
+                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary text-xs font-bold text-white">
+                      {currentUser?.name.slice(0, 1).toUpperCase()}
                     </span>
                   )}
-                  <span className="max-w-[120px] truncate">{user.name}</span>
+                  <span className="truncate">{currentUser?.name}</span>
                 </Link>
                 <button
                   type="button"
                   onClick={handleLogout}
                   className="btn btn-secondary text-sm"
                 >
-                  Đăng xuất
+                  Dang xuat
                 </button>
               </>
             ) : (
               <>
                 <Link href="/login" className="btn btn-secondary">
-                  Đăng nhập
+                  Dang nhap
                 </Link>
                 <Link href="/signup" className="btn btn-primary">
-                  Đăng ký
+                  Dang ky
                 </Link>
               </>
             )}
           </div>
 
-          {/* Hamburger button – mobile */}
+          <Link href={createHref} className="btn btn-primary h-10 w-10 px-0 md:hidden" aria-label="Dang tac pham">
+            <Plus className="h-4 w-4" aria-hidden />
+          </Link>
+
           <button
             type="button"
             className="btn btn-secondary h-10 w-10 px-0 md:hidden"
-            onClick={() => setIsOpen((v) => !v)}
+            onClick={() => setIsOpen((value) => !value)}
             aria-expanded={isOpen}
-            aria-label="Mở menu"
+            aria-label="Mo menu"
           >
-            <span aria-hidden>{isOpen ? "✕" : "≡"}</span>
+            {isOpen ? <X className="h-4 w-4" aria-hidden /> : <Menu className="h-4 w-4" aria-hidden />}
           </button>
         </div>
       </nav>
 
-      {/* Mobile dropdown */}
       {isOpen && (
         <div className="border-t border-border bg-surface md:hidden">
           <div className="app-container grid gap-1 py-3">
-            {allLinks.map((link) => (
+            {publicLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                className="rounded-lg bg-surface-soft px-3 py-3 text-sm font-semibold"
+                className={linkClass(link.href)}
                 onClick={() => setIsOpen(false)}
               >
                 {link.label}
               </Link>
             ))}
-            <div className="mt-1 border-t border-border pt-2">
-              {isAuthenticated && user ? (
+            <Link
+              href={createHref}
+              className={linkClass("/portfolio/create")}
+              onClick={() => setIsOpen(false)}
+            >
+              Dang tac pham
+            </Link>
+            {signedIn && (
+              <Link
+                href="/dashboard"
+                className={linkClass("/dashboard")}
+                onClick={() => setIsOpen(false)}
+              >
+                Dashboard
+              </Link>
+            )}
+
+            <div className="mt-2 border-t border-border pt-2">
+              {signedIn ? (
                 <>
-                  <div className="flex items-center gap-2 rounded-lg px-3 py-2">
-                    {user.avatar ? (
+                  <Link
+                    href="/dashboard"
+                    className="flex items-center gap-2 rounded-md px-3 py-3 text-sm font-semibold"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    {currentUser?.avatar ? (
                       <Image
-                        src={user.avatar}
-                        alt={user.name}
+                        src={currentUser.avatar}
+                        alt={currentUser.name}
                         width={28}
                         height={28}
-                        className="rounded-full"
+                        className="h-7 w-7 rounded-full object-cover"
                       />
                     ) : (
-                      <span className="grid h-7 w-7 place-items-center rounded-full bg-primary text-xs font-bold text-white">
-                        {user.name.slice(0, 1)}
-                      </span>
+                      <UserRound className="h-5 w-5 text-primary" aria-hidden />
                     )}
-                    <span className="text-sm font-semibold">{user.name}</span>
-                  </div>
+                    <span className="truncate">{currentUser?.name}</span>
+                  </Link>
                   <button
                     type="button"
-                    className="w-full rounded-lg bg-surface-soft px-3 py-3 text-left text-sm font-semibold text-danger"
+                    className="w-full rounded-md bg-surface-soft px-3 py-3 text-left text-sm font-semibold text-danger"
                     onClick={handleLogout}
                   >
-                    Đăng xuất
+                    Dang xuat
                   </button>
                 </>
               ) : (
-                <>
+                <div className="grid grid-cols-2 gap-2">
                   <Link
                     href="/login"
-                    className="block rounded-lg bg-surface-soft px-3 py-3 text-sm font-semibold"
+                    className="btn btn-secondary w-full"
                     onClick={() => setIsOpen(false)}
                   >
-                    Đăng nhập
+                    Dang nhap
                   </Link>
                   <Link
                     href="/signup"
-                    className="mt-1 block rounded-lg bg-primary px-3 py-3 text-sm font-semibold text-white"
+                    className="btn btn-primary w-full"
                     onClick={() => setIsOpen(false)}
                   >
-                    Đăng ký
+                    Dang ky
                   </Link>
-                </>
+                </div>
               )}
             </div>
           </div>

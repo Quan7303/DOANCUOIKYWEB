@@ -13,7 +13,7 @@ const getUserProfile = async (req, res, next) => {
     }
 
     const portfolios = await Portfolio.find({ user: req.params.id })
-        .select('title images likesCount views colors category createdAt')
+        .select('title description images tags likesCount views colors category createdAt')
         .sort({ createdAt: -1 })
 
     res.status(200).json({

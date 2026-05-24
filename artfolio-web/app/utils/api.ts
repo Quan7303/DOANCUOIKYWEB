@@ -1,8 +1,6 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 import { useAuthStore } from "../store/useAuthStore";
-
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+import { API_ORIGIN } from "./apiConfig";
 
 type RetryRequestConfig = InternalAxiosRequestConfig & {
   _retry?: boolean;
@@ -36,7 +34,8 @@ function redirectToLogin() {
   const isLoginPage = window.location.pathname.includes("/login");
 
   if (!isLoginPage) {
-    window.location.href = "/login";
+    const next = `${window.location.pathname}${window.location.search}`;
+    window.location.href = `/login?next=${encodeURIComponent(next)}`;
   }
 }
 
@@ -50,7 +49,7 @@ function isRefreshTokenRequest(url?: string) {
 }
 
 export const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: API_ORIGIN,
   withCredentials: true,
   headers: {
     "Content-Type": "application/json",

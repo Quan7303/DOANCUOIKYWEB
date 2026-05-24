@@ -1,0 +1,11 @@
+{
+  "name": "artfolio-workspace",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix artfolio-web run dev",
+    "build": "npm --prefix artfolio-web run build",
+    "web:dev": "npm --prefix artfolio-web run dev",
+    "web:build": "npm --prefix artfolio-web run build",
+    "api:dev": "npm --prefix artfolio-api run dev"
+  }
+}

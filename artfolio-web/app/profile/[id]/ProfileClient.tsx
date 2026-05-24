@@ -8,7 +8,8 @@ import FollowButton from "./components/FollowButton";
 import UserStats from "./components/UserStats";
 import StateBlock from "../../components/StateBlock";
 import ExportPdfButton from "../../components/ExportPdfButton";
-import { useAuthStore } from "../../../store/useAuthStore";
+import { useAuthStore } from "../../store/useAuthStore";
+import { getApiUrl } from "../../utils/apiConfig";
 
 type ProfileClientProps = {
   userId: string;
@@ -25,6 +26,7 @@ type MongoUser = {
   skills?: string[];
   followersCount: number;
   followingCount: number;
+  followers?: string[];
 };
 
 type MongoPortfolio = {
@@ -47,9 +49,7 @@ type ProfileState = {
 
 async function loadProfileData(userId: string): Promise<ProfileState> {
   try {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-    
-    const response = await fetch(`${apiUrl}/users/${userId}`, {
+    const response = await fetch(getApiUrl(`users/${userId}`), {
       cache: "no-store",
     });
 
@@ -72,6 +72,7 @@ async function loadProfileData(userId: string): Promise<ProfileState> {
       skills: data.skills || [],
       followersCount: data.followersCount || 0,
       followingCount: data.followingCount || 0,
+      followers: data.followers || [],
     };
 
     const portfolios: MongoPortfolio[] = data.portfolios || [];
@@ -114,17 +115,8 @@ export default function ProfileClient({ userId }: ProfileClientProps) {
       if (!data.user) {
         setErrorMessage("Không tìm thấy hồ sơ người dùng.");
       } else if (currentUser) {
-        try {
-           const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-           const authorRes = await fetch(`${apiUrl}/users/${data.user._id}`);
-           if (authorRes.ok) {
-             const authorData = await authorRes.json();
-             const followers = authorData.data?.followers || [];
-             setInitialFollowing(followers.includes(currentUser._id || currentUser.id));
-           }
-        } catch (e) {
-           console.error(e);
-        }
+        const followers = data.user.followers || [];
+        setInitialFollowing(followers.includes(currentUser._id || currentUser.id));
       }
 
       setIsLoading(false);

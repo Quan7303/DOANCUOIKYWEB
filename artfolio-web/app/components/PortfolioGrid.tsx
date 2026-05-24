@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Heart, MessageCircle, Eye } from "lucide-react";
+import { Eye, Heart } from "lucide-react";
 import type { PortfolioCategory, PortfolioSummary } from "../types/api";
 
 type PortfolioGridProps = {

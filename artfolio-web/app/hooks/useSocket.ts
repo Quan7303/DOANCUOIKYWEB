@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { io, type Socket } from "socket.io-client";
+import { getSocketUrl } from "../utils/apiConfig";
 
 type UseSocketOptions = {
   userId?: string;
@@ -10,14 +11,6 @@ type UseSocketOptions = {
 };
 
 let socketInstance: Socket | null = null;
-
-function getSocketUrl() {
-  return (
-    process.env.NEXT_PUBLIC_SOCKET_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    "http://localhost:5000"
-  );
-}
 
 export function getSocket() {
   if (typeof window === "undefined") return null;
@@ -49,11 +42,11 @@ export function useSocket({
       setIsConnected(true);
 
       if (userId) {
-        socket?.emit("join_room", { userId });
+        socket?.emit("join_room", userId);
       }
 
       if (portfolioId) {
-        socket?.emit("join_portfolio_room", { portfolioId });
+        socket?.emit("join_portfolio", portfolioId);
       }
     }
 
@@ -75,7 +68,7 @@ export function useSocket({
       socket.off("disconnect", handleDisconnect);
 
       if (portfolioId) {
-        socket.emit("leave_portfolio_room", { portfolioId });
+        socket.emit("leave_portfolio", portfolioId);
       }
     };
   }, [socket, userId, portfolioId, enabled]);

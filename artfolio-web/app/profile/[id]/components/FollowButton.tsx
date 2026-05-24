@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAuthStore } from "../../../store/useAuthStore";
 import toast from "react-hot-toast";
+import { getApiUrl } from "../../../utils/apiConfig";
 
 type FollowButtonProps = {
   targetUserId: string;
@@ -15,20 +16,19 @@ export default function FollowButton({
   initialFollowing = false,
   onFollowerChange,
 }: FollowButtonProps) {
-  const { user, isAuthenticated } = useAuthStore();
+  const { user, isAuthenticated, accessToken } = useAuthStore();
 
   const [isFollowing, setIsFollowing] = useState(initialFollowing);
   const [isLoading, setIsLoading] = useState(false);
 
   const isOwnProfile = user?._id === targetUserId || user?.id === targetUserId;
-  const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
 
   useEffect(() => {
     setIsFollowing(initialFollowing);
   }, [initialFollowing]);
 
   async function handleFollow() {
-    if (!isAuthenticated || !user || !token) {
+    if (!isAuthenticated || !user || !accessToken) {
       toast.error("Vui lòng đăng nhập để theo dõi người dùng.");
       return;
     }
@@ -48,11 +48,10 @@ export default function FollowButton({
     setIsLoading(true);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-      const res = await fetch(`${apiUrl}/users/${targetUserId}/follow`, {
+      const res = await fetch(getApiUrl(`users/${targetUserId}/follow`), {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${token}`
+          "Authorization": `Bearer ${accessToken}`
         }
       });
       

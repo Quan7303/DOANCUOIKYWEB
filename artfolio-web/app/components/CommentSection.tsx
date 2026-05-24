@@ -7,49 +7,27 @@ import { api } from "../utils/api";
 import StateBlock from "../components/StateBlock";
 
 type CommentItem = {
-  id: string;
+  _id: string;
   portfolioId: string;
-  content: string;
+  text: string;
   user: {
-    id: string;
+    _id: string;
     name: string;
     avatar?: string;
   };
   createdAt: string;
 };
 
-type NewCommentPayload = CommentItem;
+type NewCommentPayload =
+  | CommentItem
+  | {
+      portfolioId: string;
+      comment: CommentItem;
+    };
 
 type CommentSectionProps = {
   portfolioId: string;
 };
-
-const COMMENT_STORAGE_KEY = "artfolio-comments";
-
-function readLocalComments(portfolioId: string): CommentItem[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = localStorage.getItem(COMMENT_STORAGE_KEY);
-    const allComments = raw ? (JSON.parse(raw) as CommentItem[]) : [];
-
-    return allComments.filter((comment) => comment.portfolioId === portfolioId);
-  } catch {
-    return [];
-  }
-}
-
-function saveLocalComment(comment: CommentItem) {
-  if (typeof window === "undefined") return;
-
-  const raw = localStorage.getItem(COMMENT_STORAGE_KEY);
-  const allComments = raw ? (JSON.parse(raw) as CommentItem[]) : [];
-
-  localStorage.setItem(
-    COMMENT_STORAGE_KEY,
-    JSON.stringify([comment, ...allComments])
-  );
-}
 
 function CommentSkeleton() {
   return (
@@ -96,15 +74,20 @@ export default function CommentSection({ portfolioId }: CommentSectionProps) {
 
       try {
         const response = await api.get(`/api/comments/portfolio/${portfolioId}`);
-        const data = response.data?.data?.comments || response.data?.comments || [];
+        const data = response.data?.data || response.data?.comments || [];
 
         if (!isMounted) return;
 
-        setComments(data);
+        setComments(
+          data.map((comment: CommentItem) => ({
+            ...comment,
+            portfolioId,
+          }))
+        );
       } catch (error) {
         if (!isMounted) return;
         console.error("Failed to load comments:", error);
-        setComments(readLocalComments(portfolioId));
+        setComments([]);
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -123,16 +106,21 @@ export default function CommentSection({ portfolioId }: CommentSectionProps) {
     if (!socket) return;
 
     function handleNewComment(payload: NewCommentPayload) {
-      if (payload.portfolioId !== portfolioId) return;
+      const nextComment = "comment" in payload ? payload.comment : payload;
+      const nextPortfolioId = payload.portfolioId || nextComment.portfolioId;
+
+      if (nextPortfolioId !== portfolioId) return;
 
       setComments((current) => {
-        const existed = current.some((comment) => comment.id === payload.id);
+        const existed = current.some(
+          (comment) => comment._id === nextComment._id
+        );
 
         if (existed) {
           return current;
         }
 
-        return [payload, ...current];
+        return [{ ...nextComment, portfolioId }, ...current];
       });
     }
 
@@ -160,11 +148,11 @@ export default function CommentSection({ portfolioId }: CommentSectionProps) {
     }
 
     const optimisticComment: CommentItem = {
-      id: `local-comment-${Date.now()}`,
+      _id: `local-comment-${Date.now()}`,
       portfolioId,
-      content: trimmedContent,
+      text: trimmedContent,
       user: {
-        id: user.id,
+        _id: user._id || user.id,
         name: user.name,
         avatar: user.avatar,
       },
@@ -178,14 +166,13 @@ export default function CommentSection({ portfolioId }: CommentSectionProps) {
     try {
       await api.post("/api/comments", {
         portfolioId,
-        content: trimmedContent,
+        text: trimmedContent,
       });
 
-      socket?.emit("create_comment", optimisticComment);
       setMessage("Đã bình luận.");
     } catch {
       setComments((current) =>
-        current.filter((comment) => comment.id !== optimisticComment.id)
+        current.filter((comment) => comment._id !== optimisticComment._id)
       );
       setMessage("Gửi bình luận thất bại. Đã hoàn tác.");
     } finally {
@@ -239,7 +226,7 @@ export default function CommentSection({ portfolioId }: CommentSectionProps) {
         <div className="grid gap-3">
           {sortedComments.map((comment) => (
             <article
-              key={comment.id}
+              key={comment._id}
               className="rounded-xl border border-border bg-surface p-4"
             >
               <div className="flex items-start gap-3">
@@ -264,7 +251,7 @@ export default function CommentSection({ portfolioId }: CommentSectionProps) {
                   </div>
 
                   <p className="mt-1 text-sm leading-6 text-muted">
-                    {comment.content}
+                    {comment.text}
                   </p>
                 </div>
               </div>

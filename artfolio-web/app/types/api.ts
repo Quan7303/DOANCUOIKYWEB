@@ -30,11 +30,26 @@ export type ApiListResponse<T> = {
 };
 
 export type AuthUser = {
+  _id?: string;
   id: string;
   name: string;
   email: string;
   role: "user" | "admin";
   avatar?: string;
+  portfolioTitle?: string;
+  portfolioDescription?: string;
+  skills?: string[];
+  experience?: string[];
+  socialLinks?: {
+    github?: string;
+    instagram?: string;
+    behance?: string;
+    linkedin?: string;
+  };
+  followers?: string[];
+  following?: string[];
+  followersCount?: number;
+  followingCount?: number;
 };
 
 export type AuthStoreContract = {

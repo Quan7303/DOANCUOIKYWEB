@@ -2,10 +2,18 @@ import type { Metadata } from "next";
 import SignupPage from "./SignupPage";
 
 export const metadata: Metadata = {
-  title: "Đăng ký",
-  description: "Tạo tài khoản Artfolio để upload và quản lý portfolio sáng tạo của bạn.",
+  title: "Dang ky",
+  description: "Tao tai khoan Artfolio de chia se portfolio sang tao cua ban.",
 };
 
-export default function Page() {
-  return <SignupPage />;
+type PageProps = {
+  searchParams?: Promise<{
+    next?: string;
+  }>;
+};
+
+export default async function Page({ searchParams }: PageProps) {
+  const params = await searchParams;
+
+  return <SignupPage nextPath={params?.next} />;
 }

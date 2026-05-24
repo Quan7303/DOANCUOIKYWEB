@@ -8,16 +8,33 @@ import { useForm } from "react-hook-form";
 import { useAuthStore } from "../store/useAuthStore";
 import { signupSchema, type SignupFormValues } from "../utils/validationSchemas";
 
-export default function SignupPage() {
+type SignupPageProps = {
+  nextPath?: string;
+};
+
+function getSafeNextPath(value?: string) {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) {
+    return "/dashboard";
+  }
+
+  return value;
+}
+
+export default function SignupPage({ nextPath }: SignupPageProps) {
   const router = useRouter();
   const { signup, isAuthenticated } = useAuthStore();
+  const redirectPath = getSafeNextPath(nextPath);
+  const loginHref =
+    redirectPath === "/dashboard"
+      ? "/login"
+      : `/login?next=${encodeURIComponent(redirectPath)}`;
   const [apiError, setApiError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Nếu đã đăng nhập, chuyển về dashboard
   useEffect(() => {
-    if (isAuthenticated) router.replace("/dashboard");
-  }, [isAuthenticated, router]);
+    if (isAuthenticated) router.replace(redirectPath);
+  }, [isAuthenticated, redirectPath, router]);
 
   const {
     register,
@@ -33,7 +50,7 @@ export default function SignupPage() {
     setApiError("");
     try {
       await signup({ name: values.name, email: values.email, password: values.password });
-      router.replace("/dashboard");
+      router.replace(`/login?registered=1&next=${encodeURIComponent(redirectPath)}`);
     } catch (err) {
       setApiError(err instanceof Error ? err.message : "Tạo tài khoản thất bại.");
     } finally {
@@ -113,7 +130,7 @@ export default function SignupPage() {
 
           <p className="mt-5 text-center text-sm text-muted">
             Đã có tài khoản?{" "}
-            <Link href="/login" className="font-bold text-primary">
+            <Link href={loginHref} className="font-bold text-primary">
               Đăng nhập
             </Link>
           </p>

@@ -122,8 +122,8 @@ const login = async (req, res, next) => {
 
     res.cookie('refreshToken', result.refreshToken, {
       httpOnly: true,
-      secure: true,
-      sameSite: 'none',
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       maxAge: 14 * 24 * 60 * 60 * 1000
     })
 
@@ -140,10 +140,21 @@ const logout = async (req, res, next) => {
   try {
     res.clearCookie('refreshToken', {
       httpOnly: true,
-      secure: true,
-      sameSite: 'none'
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
     })
     res.status(200).json({ message: 'Đăng xuất thành công!' })
+  } catch (error) {
+    next(error)
+  }
+}
+
+const me = async (req, res, next) => {
+  try {
+    res.status(200).json({
+      status: 'success',
+      data: req.user
+    })
   } catch (error) {
     next(error)
   }
@@ -163,5 +174,6 @@ export const authController = {
   signup,
   login,
   logout,
+  me,
   refreshToken
 }

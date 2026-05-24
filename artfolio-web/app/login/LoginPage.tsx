@@ -8,16 +8,36 @@ import { useForm } from "react-hook-form";
 import { useAuthStore } from "../store/useAuthStore";
 import { loginSchema, type LoginFormValues } from "../utils/validationSchemas";
 
-export default function LoginPage() {
+type LoginPageProps = {
+  registered?: boolean;
+  nextPath?: string;
+};
+
+function getSafeNextPath(value?: string) {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) {
+    return "/dashboard";
+  }
+
+  return value;
+}
+
+export default function LoginPage({
+  registered = false,
+  nextPath,
+}: LoginPageProps) {
   const router = useRouter();
   const { login, isAuthenticated } = useAuthStore();
+  const redirectPath = getSafeNextPath(nextPath);
+  const signupHref =
+    redirectPath === "/dashboard"
+      ? "/signup"
+      : `/signup?next=${encodeURIComponent(redirectPath)}`;
   const [apiError, setApiError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Nếu đã đăng nhập, chuyển về dashboard
   useEffect(() => {
-    if (isAuthenticated) router.replace("/dashboard");
-  }, [isAuthenticated, router]);
+    if (isAuthenticated) router.replace(redirectPath);
+  }, [isAuthenticated, redirectPath, router]);
 
   const {
     register,
@@ -31,11 +51,12 @@ export default function LoginPage() {
   const onSubmit = async (values: LoginFormValues) => {
     setIsSubmitting(true);
     setApiError("");
+
     try {
       await login(values.email, values.password);
-      router.replace("/dashboard");
+      router.replace(redirectPath);
     } catch (err) {
-      setApiError(err instanceof Error ? err.message : "Đăng nhập thất bại.");
+      setApiError(err instanceof Error ? err.message : "Dang nhap that bai.");
     } finally {
       setIsSubmitting(false);
     }
@@ -47,17 +68,18 @@ export default function LoginPage() {
         <div className="surface w-full max-w-md rounded-lg p-5 sm:p-7">
           <div className="mb-6">
             <p className="text-sm font-bold uppercase text-primary">Artfolio</p>
-            <h1 className="mt-2 text-2xl font-bold">Đăng nhập</h1>
-            <p className="mt-2 text-sm text-muted">
-              Dùng tài khoản demo:{" "}
-              <span className="font-semibold text-foreground">minhanh@artfolio.vn</span> /{" "}
-              <span className="font-semibold text-foreground">Demo123</span>
-            </p>
+            <h1 className="mt-2 text-2xl font-bold">Dang nhap</h1>
           </div>
 
           {apiError && (
             <div className="mb-4 rounded-lg border border-danger bg-surface p-3 text-sm font-semibold text-danger">
               {apiError}
+            </div>
+          )}
+
+          {registered && !apiError && (
+            <div className="mb-4 rounded-lg border border-border bg-surface-soft p-3 text-sm font-semibold text-foreground">
+              Dang ky thanh cong. Vui long dang nhap de tiep tuc.
             </div>
           )}
 
@@ -76,13 +98,13 @@ export default function LoginPage() {
             </label>
 
             <label className="field">
-              <span className="label">Mật khẩu</span>
+              <span className="label">Mat khau</span>
               <input
                 id="login-password"
                 className={`input${errors.password ? " input-error" : ""}`}
                 type="password"
                 autoComplete="current-password"
-                placeholder="Mật khẩu"
+                placeholder="Mat khau"
                 {...register("password")}
               />
               {errors.password && <span className="error-text">{errors.password.message}</span>}
@@ -94,14 +116,14 @@ export default function LoginPage() {
               className="btn btn-primary mt-2 w-full"
               disabled={isSubmitting}
             >
-              {isSubmitting ? "Đang đăng nhập..." : "Đăng nhập"}
+              {isSubmitting ? "Dang dang nhap..." : "Dang nhap"}
             </button>
           </form>
 
           <p className="mt-5 text-center text-sm text-muted">
-            Chưa có tài khoản?{" "}
-            <Link href="/signup" className="font-bold text-primary">
-              Đăng ký
+            Chua co tai khoan?{" "}
+            <Link href={signupHref} className="font-bold text-primary">
+              Dang ky
             </Link>
           </p>
         </div>

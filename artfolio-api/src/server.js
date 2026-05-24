@@ -25,7 +25,10 @@ const io = new Server(httpServer, {
 app.set('io', io)
 
 // ================= MIDDLEWARE =================
-app.use(cors())
+app.use(cors({
+  origin: env.FRONTEND_URL || 'http://localhost:3000',
+  credentials: true
+}))
 app.use(express.json())
 app.use(cookieParser())
 

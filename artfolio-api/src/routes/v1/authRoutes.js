@@ -4,6 +4,7 @@ import rateLimit from 'express-rate-limit'
 import { signupValidation, loginValidation } from '~/validations/authValidation.js'
 
 import { authController } from '~/controllers/authController.js'
+import { protect } from '~/middlewares/authMiddleware.js'
 
 import {
   forgotPassword,
@@ -34,6 +35,8 @@ router.post(
 )
 
 router.post('/logout', authController.logout)
+
+router.get('/me', protect, authController.me)
 
 router.post('/refresh-token', authController.refreshToken)
 
