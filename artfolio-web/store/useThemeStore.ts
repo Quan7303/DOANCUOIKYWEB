@@ -1,45 +1,44 @@
+"use client";
+
 import { create } from "zustand";
 
-type Theme = "light" | "dark";
+export type Theme = "light" | "dark";
 
-interface ThemeState {
+type ThemeState = {
   theme: Theme;
-  toggleTheme: () => void;
+  hasHydrated: boolean;
   initializeTheme: () => void;
+  setTheme: (theme: Theme) => void;
+  toggleTheme: () => void;
+};
+
+function applyTheme(theme: Theme) {
+  if (typeof document === "undefined") return;
+  document.documentElement.classList.toggle("dark", theme === "dark");
 }
 
-export const useThemeStore = create<ThemeState>((set) => ({
+function readInitialTheme(): Theme {
+  if (typeof window === "undefined") return "light";
+
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
+
+export const useThemeStore = create<ThemeState>((set, get) => ({
   theme: "light",
-  toggleTheme: () => {
-    set((state) => {
-      const newTheme = state.theme === "light" ? "dark" : "light";
-      localStorage.setItem("artfolio-theme", newTheme);
-      
-      if (typeof window !== "undefined") {
-        if (newTheme === "dark") {
-          document.documentElement.classList.add("dark");
-        } else {
-          document.documentElement.classList.remove("dark");
-        }
-      }
-      
-      return { theme: newTheme };
-    });
-  },
+  hasHydrated: false,
   initializeTheme: () => {
-    if (typeof window !== "undefined") {
-      const storedTheme = localStorage.getItem("artfolio-theme") as Theme | null;
-      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      
-      const themeToSet = storedTheme || (prefersDark ? "dark" : "light");
-      
-      if (themeToSet === "dark") {
-        document.documentElement.classList.add("dark");
-      } else {
-        document.documentElement.classList.remove("dark");
-      }
-      
-      set({ theme: themeToSet });
-    }
+    const theme = readInitialTheme();
+    applyTheme(theme);
+    set({ theme, hasHydrated: true });
+  },
+  setTheme: (theme) => {
+    applyTheme(theme);
+    set({ theme, hasHydrated: true });
+  },
+  toggleTheme: () => {
+    const nextTheme = get().theme === "dark" ? "light" : "dark";
+    get().setTheme(nextTheme);
   },
 }));

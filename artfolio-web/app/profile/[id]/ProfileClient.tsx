@@ -8,7 +8,8 @@ import FollowButton from "./components/FollowButton";
 import UserStats from "./components/UserStats";
 import StateBlock from "../../components/StateBlock";
 import ExportPdfButton from "../../components/ExportPdfButton";
-import { useAuthStore } from "../../../store/useAuthStore";
+import { useAuthStore } from "../../store/useAuthStore";
+import { getApiUrl } from "../../utils/apiConfig";
 
 type ProfileClientProps = {
   userId: string;
@@ -25,6 +26,7 @@ type MongoUser = {
   skills?: string[];
   followersCount: number;
   followingCount: number;
+  followers?: string[];
 };
 
 type MongoPortfolio = {
@@ -47,9 +49,7 @@ type ProfileState = {
 
 async function loadProfileData(userId: string): Promise<ProfileState> {
   try {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-    
-    const response = await fetch(`${apiUrl}/users/${userId}`, {
+    const response = await fetch(getApiUrl(`users/${userId}`), {
       cache: "no-store",
     });
 
@@ -72,6 +72,7 @@ async function loadProfileData(userId: string): Promise<ProfileState> {
       skills: data.skills || [],
       followersCount: data.followersCount || 0,
       followingCount: data.followingCount || 0,
+      followers: data.followers || [],
     };
 
     const portfolios: MongoPortfolio[] = data.portfolios || [];
@@ -114,17 +115,8 @@ export default function ProfileClient({ userId }: ProfileClientProps) {
       if (!data.user) {
         setErrorMessage("Không tìm thấy hồ sơ người dùng.");
       } else if (currentUser) {
-        try {
-           const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-           const authorRes = await fetch(`${apiUrl}/users/${data.user._id}`);
-           if (authorRes.ok) {
-             const authorData = await authorRes.json();
-             const followers = authorData.data?.followers || [];
-             setInitialFollowing(followers.includes(currentUser._id || currentUser.id));
-           }
-        } catch (e) {
-           console.error(e);
-        }
+        const followers = data.user.followers || [];
+        setInitialFollowing(followers.includes(currentUser._id || currentUser.id));
       }
 
       setIsLoading(false);
@@ -196,11 +188,17 @@ export default function ProfileClient({ userId }: ProfileClientProps) {
             <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
               <div className="relative h-32 w-32 shrink-0 md:h-40 md:w-40">
                 <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-primary to-accent blur-md opacity-50" />
-                <img
-                  src={user.avatar || "/next.svg"}
-                  alt={user.name}
-                  className="relative h-full w-full rounded-full border-4 border-surface object-cover shadow-lg"
-                />
+                {user.avatar && user.avatar !== "default-avatar.png" ? (
+                  <img
+                    src={user.avatar}
+                    alt={user.name}
+                    className="relative h-full w-full rounded-full border-4 border-surface object-cover shadow-lg"
+                  />
+                ) : (
+                  <div className="relative grid h-full w-full place-items-center rounded-full border-4 border-surface bg-primary text-4xl font-extrabold text-white shadow-lg">
+                    {user.name.slice(0, 1).toUpperCase()}
+                  </div>
+                )}
               </div>
 
               <div className="pt-2 sm:pt-0">

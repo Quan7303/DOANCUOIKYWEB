@@ -1,10 +1,10 @@
 import PortfolioGrid from "../components/PortfolioGrid";
-import { getFeaturedPortfolios } from "../data/portfolios";
+import { getPortfolios } from "../data/portfolios";
 
-export const revalidate = 3600;
+export const dynamic = "force-dynamic";
 
 export default async function PortfoliosPage() {
-  const portfolios = await getFeaturedPortfolios();
+  const portfolios = await getPortfolios(60);
 
   return (
     <section className="py-8 sm:py-10">

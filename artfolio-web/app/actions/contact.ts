@@ -31,17 +31,20 @@ export async function submitFeedbackAction(prevState: any, formData: FormData) {
     return {
       success: true,
       message: `Cảm ơn ${validatedData.name}! Góp ý của bạn đã được ghi nhận.`,
+      error: "",
     };
   } catch (error) {
     if (error instanceof z.ZodError) {
       return {
         success: false,
-        error: error.errors.map((e) => e.message).join(", "),
+        message: "",
+        error: error.issues.map((e) => e.message).join(", "),
       };
     }
     
     return {
       success: false,
+      message: "",
       error: "Đã xảy ra lỗi không xác định. Vui lòng thử lại.",
     };
   }

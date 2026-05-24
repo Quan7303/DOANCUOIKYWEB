@@ -2,10 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { useAuthStore } from "../../store/useAuthStore";
-import { api } from "../../utils/api";
+import { useAuthStore } from "../store/useAuthStore";
+import { api } from "../utils/api";
 import DashboardClient from "./DashboardClient";
-import type { PortfolioDetail } from "../../types/api";
+import type { PortfolioDetail } from "../types/api";
 
 function extractPortfolios(data: unknown): PortfolioDetail[] {
   const value = data as {
@@ -24,6 +24,7 @@ function extractPortfolios(data: unknown): PortfolioDetail[] {
 export default function DashboardGuard() {
   const router = useRouter();
   const { user, isAuthenticated, isHydrated, fetchMe } = useAuthStore();
+  const userId = user?._id || user?.id;
 
   const [portfolios, setPortfolios] = useState<PortfolioDetail[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -36,7 +37,7 @@ export default function DashboardGuard() {
         const currentUser = await fetchMe();
 
         if (!currentUser) {
-          router.replace("/login");
+          router.replace("/login?next=/dashboard");
         }
       }
     }
@@ -48,7 +49,7 @@ export default function DashboardGuard() {
     if (!isHydrated) return;
 
     async function loadPortfolios() {
-      if (!isAuthenticated || !user?.id) {
+      if (!isAuthenticated || !userId) {
         setIsLoading(false);
         return;
       }
@@ -58,7 +59,7 @@ export default function DashboardGuard() {
 
         const response = await api.get("/api/portfolios", {
           params: {
-            user: user.id,
+            user: userId,
           },
         });
 
@@ -72,7 +73,7 @@ export default function DashboardGuard() {
     }
 
     loadPortfolios();
-  }, [isHydrated, isAuthenticated, user?.id]);
+  }, [isHydrated, isAuthenticated, userId]);
 
   if (!isHydrated || isLoading) {
     return (

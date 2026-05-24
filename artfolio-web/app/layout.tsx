@@ -75,7 +75,7 @@ export default function RootLayout({
         />
         <script
           dangerouslySetInnerHTML={{
-            __html: `if('serviceWorker'in navigator){navigator.serviceWorker.register('/sw.js').catch(()=>{});}`,
+            __html: `if('serviceWorker'in navigator && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'){navigator.serviceWorker.register('/sw.js').catch(()=>{});}`,
           }}
         />
         <ThemeInitializer />
