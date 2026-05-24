@@ -5,15 +5,17 @@ import { emitNotification } from '~/sockets/socketHandler.js'
 
 const createPortfolio = async (req, res, next) => {
   try {
-
     const io = req.app.get('io')
-    const result = await portfolioService.createPortfolio(req.body, req.file, req.user, io)
+    const result = await portfolioService.createPortfolio(req.body, req.files, req.user, io)
     res.status(201).json({ status: 'success', data: result })
   } catch (error) {
-
-    if (req.file && req.file.filename) {
-      cloudinary.uploader.destroy(req.file.filename).catch(err => {
-        console.error('Không thể xóa ảnh rác trên Cloudinary:', err)
+    if (req.files && req.files.length > 0) {
+      req.files.forEach(file => {
+        if (file.filename) {
+          cloudinary.uploader.destroy(file.filename).catch(err => {
+            console.error('Không thể xóa ảnh rác trên Cloudinary:', err)
+          })
+        }
       })
     }
     next(error)

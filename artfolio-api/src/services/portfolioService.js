@@ -24,25 +24,43 @@ const getPublicIdFromUrl = (url) => {
   return pathWithoutVersion
 }
 
+const parseTags = (tags) => {
+  if (!tags) return []
+  if (Array.isArray(tags)) return tags
+  try {
+    const parsed = JSON.parse(tags)
+    if (Array.isArray(parsed)) {
+      return parsed.map(t => String(t).trim()).filter(Boolean)
+    }
+  } catch (error) {
+    // Không phải mảng JSON hợp lệ, fallback sang split phẩy
+  }
+  return String(tags).split(',').map((t) => t.trim()).filter(Boolean)
+}
+
 /**
  * Tạo portfolio mới.
  * io được truyền vào để phát thông báo new_post đến followers ngay sau khi lưu DB.
  */
-const createPortfolio = async (reqBody, file, user, io = null) => {
-  if (!file) {
-    throw new ApiError(400, 'Vui lòng chọn ảnh để tải lên')
+const createPortfolio = async (reqBody, files, user, io = null) => {
+  if (!files || files.length === 0) {
+    throw new ApiError(400, 'Vui lòng chọn ít nhất 1 ảnh để tải lên')
   }
 
   const { title, description, category, tags } = reqBody
 
-  const colors = await extractColorsFromUrl(file.path)
+  // Trích xuất màu chủ đạo từ ảnh đầu tiên
+  const colors = await extractColorsFromUrl(files[0].path)
+
+  // Lấy mảng đường dẫn của tất cả ảnh
+  const imagePaths = files.map(file => file.path)
 
   const portfolio = await Portfolio.create({
     title,
     description: description || '',
     category: category || 'other',
-    tags: tags ? (Array.isArray(tags) ? tags : tags.split(',').map((t) => t.trim()).filter(Boolean)) : [],
-    images: [file.path],
+    tags: parseTags(tags),
+    images: imagePaths,
     colors,
     user: user._id
   })
@@ -162,7 +180,7 @@ const updatePortfolio = async (portfolioId, reqBody, user) => {
   if (description !== undefined) portfolio.description = description
   if (category) portfolio.category = category
   if (tags) {
-    portfolio.tags = Array.isArray(tags) ? tags : tags.split(',').map((t) => t.trim()).filter(Boolean)
+    portfolio.tags = parseTags(tags)
   }
 
   await portfolio.save()
