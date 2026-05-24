@@ -40,11 +40,7 @@ coverage/
 
 # Misc
 .vercel
-<<<<<<< HEAD
 .turbo
 
 # Antigravity Kit Agent
 .agent/
-=======
-.turbo
->>>>>>> origin/dev
