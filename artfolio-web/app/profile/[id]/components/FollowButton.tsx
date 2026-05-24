@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useAuthStore } from "../../../store/useAuthStore";
 import toast from "react-hot-toast";
 import { getApiUrl } from "../../../utils/apiConfig";
@@ -23,9 +23,6 @@ export default function FollowButton({
 
   const isOwnProfile = user?._id === targetUserId || user?.id === targetUserId;
 
-  useEffect(() => {
-    setIsFollowing(initialFollowing);
-  }, [initialFollowing]);
 
   async function handleFollow() {
     if (!isAuthenticated || !user || !accessToken) {

@@ -15,10 +15,16 @@ import { mapOrder } from './utils/sorts.js'
 const app = express()
 const httpServer = http.createServer(app)
 
+const allowedOrigins = [
+  env.FRONTEND_URL,
+  'http://localhost:3000',
+  'http://127.0.0.1:3000'
+].filter(Boolean)
+
 // Socket.io init
 const io = new Server(httpServer, {
   cors: {
-    origin: [env.FRONTEND_URL, 'http://localhost:3000'],
+    origin: allowedOrigins,
     credentials: true
   }
 })
@@ -29,7 +35,23 @@ app.set('io', io)
 initSocket(io)
 
 // ================= MIDDLEWARE =================
-app.use(cors())
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true)
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true)
+      }
+
+      return callback(new Error(`CORS blocked for origin: ${origin}`))
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+  })
+)
+
 app.use(express.json())
 app.use(cookieParser())
 

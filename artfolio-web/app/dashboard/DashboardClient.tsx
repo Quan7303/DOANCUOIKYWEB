@@ -2,7 +2,8 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import ExportPdfButton from "../components/ExportPdfButton";
 import ProfileHeader from "./components/ProfileHeader";
@@ -25,6 +26,14 @@ type DashboardClientProps = {
   myPortfolios: PortfolioDetail[];
 };
 
+type DashboardTab = "profile" | "upload" | "portfolios" | "export";
+
+function getValidDashboardTab(tab: string | null): DashboardTab {
+  if (tab === "upload") return "upload";
+  if (tab === "portfolios") return "portfolios";
+  if (tab === "export") return "export";
+  return "profile";
+}
 const categoryLabels: Record<string, string> = {
   design: "Design",
   art: "Art",
@@ -98,16 +107,20 @@ export default function DashboardClient({
   user,
   myPortfolios,
 }: DashboardClientProps) {
-  const [portfolios, setPortfolios] =
-    useState<PortfolioDetail[]>(myPortfolios);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const currentTab = searchParams.get("tab");
+  const activeTab = getValidDashboardTab(currentTab);
 
-  useEffect(() => {
-    setPortfolios(myPortfolios);
-  }, [myPortfolios]);
+  const [portfolios, setPortfolios] = useState<PortfolioDetail[]>(() =>
+    mergePortfolios(myPortfolios),
+  );
+
   const [toastMessage, setToastMessage] = useState("");
-  const [activeTab, setActiveTab] = useState<
-    "profile" | "upload" | "portfolios" | "export"
-  >("profile");
+
+  function handleChangeTab(tab: DashboardTab) {
+    router.replace(`/dashboard?tab=${tab}`, { scroll: false });
+  }
 
   const [submitResult, setSubmitResult] = useState<{
     ok: boolean;
@@ -173,7 +186,7 @@ export default function DashboardClient({
     setPortfolios((current) => mergePortfolios([portfolio, ...current]));
 
     setToastMessage("Đăng tác phẩm thành công.");
-    setActiveTab("portfolios");
+    handleChangeTab("portfolios");
 
     window.setTimeout(() => {
       setToastMessage("");
@@ -218,15 +231,6 @@ export default function DashboardClient({
             </p>
           </div>
 
-          <div className="grid gap-3 sm:flex">
-            <button
-              type="button"
-              className="btn btn-primary w-full text-sm sm:w-auto"
-              onClick={() => setActiveTab("upload")}
-            >
-              Đăng tác phẩm
-            </button>
-          </div>
         </div>
         {toastMessage && (
           <div className="mb-5 rounded-lg border border-border bg-surface-soft p-3 text-sm font-semibold text-foreground">
@@ -235,52 +239,54 @@ export default function DashboardClient({
         )}
         <div className="grid min-w-0 gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
           <aside className="grid h-fit min-w-0 gap-4">
-            <div className="surface grid gap-4 rounded-lg p-5">
-              {user.avatar && user.avatar !== "default-avatar.png" ? (
-                <Image
-                  src={user.avatar}
-                  alt={user.name}
-                  width={72}
-                  height={72}
-                  sizes="72px"
-                  className="rounded-full object-cover"
-                />
-              ) : (
-                <div className="grid h-[72px] w-[72px] place-items-center rounded-full bg-primary text-2xl font-bold text-white">
-                  {user.name.slice(0, 1)}
-                </div>
-              )}
+            {activeTab === "profile" && (
+              <div className="surface grid gap-4 rounded-lg p-5">
+                {user.avatar && user.avatar !== "default-avatar.png" ? (
+                  <Image
+                    src={user.avatar}
+                    alt={user.name}
+                    width={72}
+                    height={72}
+                    sizes="72px"
+                    className="rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="grid h-[72px] w-[72px] place-items-center rounded-full bg-primary text-2xl font-bold text-white">
+                    {user.name.slice(0, 1)}
+                  </div>
+                )}
 
-              <div>
-                <p className="font-bold">{user.name}</p>
-                <p className="text-sm text-muted">{user.email}</p>
-                {user.role === "admin" && <span className="badge mt-2">Admin</span>}
+                <div>
+                  <p className="font-bold">{user.name}</p>
+                  <p className="text-sm text-muted">{user.email}</p>
+                  {user.role === "admin" && <span className="badge mt-2">Admin</span>}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-center">
+                  <div className="rounded-lg border border-border bg-surface-soft p-3">
+                    <strong className="block text-xl">{portfolios.length}</strong>
+                    <span className="text-xs text-muted">tác phẩm</span>
+                  </div>
+
+                  <div className="rounded-lg border border-border bg-surface-soft p-3">
+                    <strong className="block text-xl">{totalLikes}</strong>
+                    <span className="text-xs text-muted">lượt thích</span>
+                  </div>
+
+                  <div className="rounded-lg border border-border bg-surface-soft p-3">
+                    <strong className="block text-xl">{totalViews}</strong>
+                    <span className="text-xs text-muted">lượt xem</span>
+                  </div>
+
+                  <div className="rounded-lg border border-border bg-surface-soft p-3">
+                    <strong className="block text-xl">
+                      {user.role === "admin" ? "Admin" : "User"}
+                    </strong>
+                    <span className="text-xs text-muted">vai trò</span>
+                  </div>
+                </div>
               </div>
-
-              <div className="grid grid-cols-2 gap-2 text-center">
-                <div className="rounded-lg border border-border bg-surface-soft p-3">
-                  <strong className="block text-xl">{portfolios.length}</strong>
-                  <span className="text-xs text-muted">tác phẩm</span>
-                </div>
-
-                <div className="rounded-lg border border-border bg-surface-soft p-3">
-                  <strong className="block text-xl">{totalLikes}</strong>
-                  <span className="text-xs text-muted">lượt thích</span>
-                </div>
-
-                <div className="rounded-lg border border-border bg-surface-soft p-3">
-                  <strong className="block text-xl">{totalViews}</strong>
-                  <span className="text-xs text-muted">lượt xem</span>
-                </div>
-
-                <div className="rounded-lg border border-border bg-surface-soft p-3">
-                  <strong className="block text-xl">
-                    {user.role === "admin" ? "Admin" : "User"}
-                  </strong>
-                  <span className="text-xs text-muted">vai trò</span>
-                </div>
-              </div>
-            </div>
+            )}
 
             <nav className="surface overflow-hidden rounded-lg">
               {tabs.map((tab) => (
@@ -292,7 +298,7 @@ export default function DashboardClient({
                       ? "bg-primary text-white"
                       : "text-muted hover:bg-surface-soft hover:text-foreground"
                   }`}
-                  onClick={() => setActiveTab(tab.key)}
+                  onClick={() => handleChangeTab(tab.key)}
                 >
                   {tab.label}
                 </button>
@@ -301,17 +307,21 @@ export default function DashboardClient({
           </aside>
 
           <div className="grid min-w-0 gap-5">
-            <ProfileHeader
-              user={user}
-              onEditProfile={() => setActiveTab("profile")}
-            />
+            {activeTab === "profile" && (
+              <>
+                <ProfileHeader
+                  user={user}
+                  onEditProfile={() => handleChangeTab("profile")}
+                />
 
-            <DashboardStats
-              portfoliosCount={portfolios.length}
-              totalLikes={totalLikes}
-              totalViews={totalViews}
-              role={user.role === "admin" ? "Admin" : "User"}
-            />
+                <DashboardStats
+                  portfoliosCount={portfolios.length}
+                  totalLikes={totalLikes}
+                  totalViews={totalViews}
+                  role={user.role === "admin" ? "Admin" : "User"}
+                />
+              </>
+            )}
 
             {activeTab === "profile" && (
               <div className="surface rounded-lg p-5 sm:p-7">
@@ -442,7 +452,7 @@ export default function DashboardClient({
                   <button
                     type="button"
                     className="btn btn-primary text-sm"
-                    onClick={() => setActiveTab("upload")}
+                    onClick={() => handleChangeTab("upload")}
                   >
                     Thêm tác phẩm
                   </button>
@@ -458,7 +468,7 @@ export default function DashboardClient({
                     <button
                       type="button"
                       className="btn btn-primary mt-5"
-                      onClick={() => setActiveTab("upload")}
+                      onClick={() => handleChangeTab("upload")}
                     >
                       Upload your first shot
                     </button>

@@ -1,9 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, useRef } from "react";
-import { Bell, CheckCheck, Trash2, X, MessageSquare, Heart, UserPlus, FileText } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Bell, CheckCheck, Trash2, MessageSquare, Heart, UserPlus, FileText } from "lucide-react";
 import { getApiUrl } from "../utils/apiConfig";
+
+export type NotificationType =
+  | "like"
+  | "comment"
+  | "follow"
+  | "new_post"
+  | "system";
 
 type NotificationItem = {
   _id: string;
@@ -13,7 +20,7 @@ type NotificationItem = {
     name: string;
     avatar?: string;
   };
-  type: "like" | "comment" | "follow" | "new_post";
+  type: NotificationType;
   portfolio?: {
     _id: string;
     title: string;
@@ -22,10 +29,30 @@ type NotificationItem = {
   createdAt: string;
 };
 
+export type SocketNotificationPayload = {
+  _id?: string;
+  id?: string;
+  recipient?: string;
+  sender?: NotificationItem["sender"];
+  senderId?: string;
+  title?: string;
+  type?: NotificationType;
+  portfolio?: NotificationItem["portfolio"];
+  portfolioId?: string;
+  portfolioTitle?: string;
+  createdAt?: string;
+};
+
+type NotificationsResponse = {
+  status?: string;
+  data?: NotificationItem[];
+  unreadCount?: number;
+};
+
 type NotificationDropdownProps = {
   accessToken: string;
   onUnreadCountChange: (count: number) => void;
-  socketNotification: any; // Real-time notification from socket
+  socketNotification: SocketNotificationPayload | null;
 };
 
 export default function NotificationDropdown({
@@ -37,13 +64,16 @@ export default function NotificationDropdown({
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [nowMs, setNowMs] = useState(0);
   
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Fetch notifications
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     if (!accessToken) return;
+
     setIsLoading(true);
+
     try {
       const res = await fetch(getApiUrl("notifications"), {
         method: "GET",
@@ -52,18 +82,23 @@ export default function NotificationDropdown({
           Accept: "application/json",
         },
       });
-      const json = await res.json();
-      if (res.ok && json.status === "success") {
-        setNotifications(json.data || []);
-        setUnreadCount(json.unreadCount || 0);
-        onUnreadCountChange(json.unreadCount || 0);
+
+      const json = (await res.json().catch(() => null)) as NotificationsResponse | null;
+
+      if (res.ok && json?.status === "success") {
+        const nextNotifications = json.data || [];
+        const nextUnreadCount = json.unreadCount || 0;
+
+        setNotifications(nextNotifications);
+        setUnreadCount(nextUnreadCount);
+        onUnreadCountChange(nextUnreadCount);
       }
     } catch (error) {
       console.error("Lỗi khi tải danh sách thông báo:", error);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [accessToken, onUnreadCountChange]);
 
   // Close when clicking outside
   useEffect(() => {
@@ -78,48 +113,64 @@ export default function NotificationDropdown({
 
   // Fetch notifications on mount
   useEffect(() => {
-    if (accessToken) {
-      fetchNotifications();
-    }
-  }, [accessToken]);
+    if (!accessToken) return;
+
+    queueMicrotask(() => {
+      void fetchNotifications();
+    });
+  }, [accessToken, fetchNotifications]);
 
   // Handle incoming socket notification
   useEffect(() => {
-    if (socketNotification) {
-      // Map the payload to match DB schema if it doesn't already
+    if (!socketNotification) return;
+
+    queueMicrotask(() => {
+      const createdAt = socketNotification.createdAt || new Date().toISOString();
+
       const newNotification: NotificationItem = {
-        _id: socketNotification._id || socketNotification.id || `notif-${Date.now()}`,
+        _id: socketNotification._id || socketNotification.id || `notif-${createdAt}`,
         recipient: socketNotification.recipient || "",
         sender: socketNotification.sender || {
           _id: socketNotification.senderId || "",
           name: socketNotification.title?.split(" ")[0] || "Người dùng",
         },
         type: socketNotification.type || "system",
-        portfolio: socketNotification.portfolio || (socketNotification.portfolioId ? {
-          _id: socketNotification.portfolioId,
-          title: socketNotification.portfolioTitle || "Tác phẩm",
-        } : undefined),
+        portfolio:
+          socketNotification.portfolio ||
+          (socketNotification.portfolioId
+            ? {
+                _id: socketNotification.portfolioId,
+                title: socketNotification.portfolioTitle || "Tác phẩm",
+              }
+            : undefined),
         isRead: false,
-        createdAt: socketNotification.createdAt || new Date().toISOString(),
+        createdAt,
       };
 
       setNotifications((current) => {
-        // Prevent duplicate IDs
-        if (current.some(n => n._id === newNotification._id)) return current;
+        if (current.some((item) => item._id === newNotification._id)) {
+          return current;
+        }
+
         return [newNotification, ...current];
       });
-      setUnreadCount(prev => {
-        const next = prev + 1;
+
+      setUnreadCount((previous) => {
+        const next = previous + 1;
         onUnreadCountChange(next);
         return next;
       });
-    }
-  }, [socketNotification]);
+    });
+  }, [socketNotification, onUnreadCountChange]);
 
   const toggleDropdown = () => {
-    setIsOpen(!isOpen);
-    if (!isOpen) {
-      fetchNotifications();
+    const nextOpen = !isOpen;
+
+    setIsOpen(nextOpen);
+
+    if (nextOpen) {
+      setNowMs(Date.now());
+      void fetchNotifications();
     }
   };
 
@@ -254,7 +305,8 @@ export default function NotificationDropdown({
   const formatTime = (isoString: string) => {
     try {
       const date = new Date(isoString);
-      const diffMs = Date.now() - date.getTime();
+      const currentTime = nowMs || date.getTime();
+      const diffMs = Math.max(0, currentTime - date.getTime());
       const diffMins = Math.floor(diffMs / 60000);
       const diffHours = Math.floor(diffMins / 60);
       const diffDays = Math.floor(diffHours / 24);

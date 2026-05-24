@@ -43,6 +43,8 @@ function PortfolioCard({ portfolio, index }: { portfolio: PortfolioSummary; inde
   // In a real app, images array should have width/height or we enforce a few classes
   const heights = ["aspect-[4/3]", "aspect-[3/4]", "aspect-square", "aspect-[16/9]"];
   const randomAspect = heights[index % heights.length];
+  const authorName = portfolio.user?.name || "Unknown user";
+  const authorInitial = authorName.slice(0, 1).toUpperCase();
 
   return (
     <motion.div
@@ -59,7 +61,7 @@ function PortfolioCard({ portfolio, index }: { portfolio: PortfolioSummary; inde
           {/* Image Container with Hover Overlay */}
           <div className={`relative w-full overflow-hidden bg-surface-soft ${randomAspect}`}>
             <Image
-              src={portfolio.images[0] || "/next.svg"}
+              src={portfolio.images?.[0] || "/next.svg"}
               alt={portfolio.title}
               fill
               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
@@ -72,19 +74,19 @@ function PortfolioCard({ portfolio, index }: { portfolio: PortfolioSummary; inde
             {/* Hover Actions (Author & Stats) */}
             <div className="absolute inset-x-0 bottom-0 flex translate-y-4 items-end justify-between p-4 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
               <div className="flex items-center gap-2">
-                {portfolio.user.avatar && portfolio.user.avatar !== "default-avatar.png" ? (
+                {portfolio.user?.avatar && portfolio.user.avatar !== "default-avatar.png" ? (
                   <img
                     src={portfolio.user.avatar}
-                    alt={portfolio.user.name}
+                    alt={authorName}
                     className="h-8 w-8 rounded-full border-2 border-white object-cover"
                   />
                 ) : (
                   <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full border-2 border-white bg-primary text-[10px] font-bold text-white uppercase">
-                    {portfolio.user.name.slice(0, 1)}
+                    {authorInitial}
                   </span>
                 )}
                 <span className="text-sm font-semibold text-white drop-shadow-md">
-                  {portfolio.user.name}
+                  {authorName}
                 </span>
               </div>
             </div>
@@ -143,7 +145,7 @@ export default function PortfolioGrid({
       const matchesQuery =
         !q ||
         normalize(portfolio.title).includes(q) ||
-        normalize(portfolio.user.name).includes(q) ||
+        normalize(portfolio.user?.name || "").includes(q) ||
         (portfolio.tags && portfolio.tags.some((item) => normalize(item).includes(q)));
       const matchesCategory = category === "all" || portfolio.category === category;
       const matchesTag = tag === "all" || (portfolio.tags && portfolio.tags.includes(tag));

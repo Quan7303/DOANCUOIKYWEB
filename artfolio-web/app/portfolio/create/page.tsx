@@ -113,7 +113,7 @@ export default function CreatePortfolioPage() {
       } else {
         setAiError(data.message || "Không thể phân tích bảng màu.");
       }
-    } catch (e) {
+    } catch {
       setAiError("Không kết nối được AI server.");
     } finally {
       setIsAnalyzing(false);
@@ -170,9 +170,15 @@ export default function CreatePortfolioPage() {
       } else {
         throw new Error(data.message || "Đã xảy ra lỗi khi tạo tác phẩm.");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
-      setApiError(error.message || "Lỗi mạng hoặc server không phản hồi.");
+
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Lỗi mạng hoặc server không phản hồi.";
+
+      setApiError(message);
     } finally {
       setIsSubmitting(false);
     }

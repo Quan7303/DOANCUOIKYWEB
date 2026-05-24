@@ -9,8 +9,19 @@ const feedbackSchema = z.object({
   message: z.string().min(10, "Lời nhắn phải có ít nhất 10 ký tự."),
 });
 
+export type FeedbackState = {
+  success: boolean;
+  message: string;
+  error: string;
+};
+
 // Server Action thuần (Thỏa tiêu chí 9)
-export async function submitFeedbackAction(prevState: any, formData: FormData) {
+export async function submitFeedbackAction(
+  prevState: FeedbackState,
+  formData: FormData,
+): Promise<FeedbackState> {
+  void prevState;
+
   try {
     const rawData = {
       name: formData.get("name"),
@@ -38,10 +49,10 @@ export async function submitFeedbackAction(prevState: any, formData: FormData) {
       return {
         success: false,
         message: "",
-        error: error.issues.map((e) => e.message).join(", "),
+        error: error.issues.map((issue) => issue.message).join(", "),
       };
     }
-    
+
     return {
       success: false,
       message: "",

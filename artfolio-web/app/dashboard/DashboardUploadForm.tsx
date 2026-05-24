@@ -104,20 +104,17 @@ export default function DashboardUploadForm({
         .map((tag) => tag.trim())
         .filter(Boolean);
 
-      // Create FormData for backend upload
       const formData = new FormData();
-      formData.append("title", values.title);
-      formData.append("description", values.description);
-      formData.append("category", values.category);
-      tagList.forEach((tag) => formData.append("tags", tag));
-      formData.append("image", imageFile);
 
-      // Call backend API to upload portfolio
-      const response = await api.post("/api/portfolios", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
+      formData.append("title", values.title.trim());
+      formData.append("description", values.description.trim());
+      formData.append("category", values.category);
+      formData.append("tags", JSON.stringify(tagList));
+      formData.append("images", imageFile);
+
+      console.log("Upload image file:", formData.get("images"));
+
+      const response = await api.post("/api/portfolios", formData);
 
       const newPortfolio =
         response.data?.data?.portfolio ||
@@ -131,8 +128,11 @@ export default function DashboardUploadForm({
       removeImage();
       setSubmitMessage("Đăng tác phẩm thành công.");
     } catch (error) {
+      console.error("Upload portfolio error:", error);
+
       const message =
         error instanceof Error ? error.message : "Đăng tác phẩm thất bại";
+
       setSubmitMessage(message);
     } finally {
       setIsSubmitting(false);

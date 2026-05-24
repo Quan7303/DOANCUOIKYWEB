@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Loader2, ArrowLeft, Save, Sparkles } from "lucide-react";
+import { Loader2, ArrowLeft, Save } from "lucide-react";
 import Link from "next/link";
 import { useAuthStore } from "../../../store/useAuthStore";
 import { api } from "../../../utils/api";
@@ -34,8 +34,7 @@ export default function EditPortfolioClient({
   portfolioId,
 }: EditPortfolioClientProps) {
   const router = useRouter();
-  const { isAuthenticated, isHydrated, accessToken, user: currentUser } =
-    useAuthStore();
+  const { isAuthenticated, isHydrated, user: currentUser } = useAuthStore();
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -149,12 +148,22 @@ export default function EditPortfolioClient({
       } else {
         throw new Error(response.data?.message || "Không thể cập nhật tác phẩm.");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
+
+      const axiosError = err as {
+        response?: {
+          data?: {
+            message?: string;
+          };
+        };
+        message?: string;
+      };
+
       setApiError(
-        err.response?.data?.message ||
-        err.message ||
-        "Lỗi mạng hoặc server không phản hồi."
+        axiosError.response?.data?.message ||
+          axiosError.message ||
+          "Lỗi mạng hoặc server không phản hồi.",
       );
     } finally {
       setIsSubmitting(false);

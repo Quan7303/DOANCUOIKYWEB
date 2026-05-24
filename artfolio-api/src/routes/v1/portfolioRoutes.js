@@ -8,7 +8,7 @@ const Router = express.Router()
 
 Router.get('/', portfolioController.getPortfolioList)
 Router.get('/:id', portfolioController.getPortfolioDetail)
-
+Router.post('/:id/view', portfolioController.increasePortfolioView)
 Router.post('/', protect, uploadMultiple, createValidation, portfolioController.createPortfolio)
 Router.put('/:id', protect, updateValidation, portfolioController.updatePortfolio)
 Router.delete('/:id', protect, portfolioController.deletePortfolio)

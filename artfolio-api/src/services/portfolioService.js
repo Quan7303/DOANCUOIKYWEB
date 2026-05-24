@@ -150,17 +150,30 @@ const getPortfolioList = async (queryParams) => {
 }
 
 const getPortfolioDetail = async (portfolioId) => {
-  const portfolio = await Portfolio.findByIdAndUpdate(
-      portfolioId,
-      { $inc: { views: 1 } },
-      { returnDocument: 'after' }
-  ).populate('user', 'name avatar portfolioTitle')
+  const portfolio = await Portfolio.findById(portfolioId)
+    .populate('user', 'name avatar portfolioTitle')
 
   if (!portfolio) {
     throw new ApiError(404, 'Không tìm thấy tác phẩm')
   }
 
   return portfolio
+}
+
+const increasePortfolioView = async (portfolioId) => {
+  const portfolio = await Portfolio.findByIdAndUpdate(
+    portfolioId,
+    { $inc: { views: 1 } },
+    { new: true }
+  ).select('views')
+
+  if (!portfolio) {
+    throw new ApiError(404, 'Không tìm thấy tác phẩm')
+  }
+
+  return {
+    views: portfolio.views
+  }
 }
 
 const updatePortfolio = async (portfolioId, reqBody, user) => {
@@ -266,5 +279,6 @@ export const portfolioService = {
   getPortfolioDetail,
   updatePortfolio,
   deletePortfolio,
-  toggleLike
+  toggleLike,
+  increasePortfolioView
 }
