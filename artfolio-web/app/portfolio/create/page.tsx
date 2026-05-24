@@ -1,17 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm, Controller } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Upload, X, Loader2, Sparkles } from "lucide-react";
-import { useAuthStore } from "../../../store/useAuthStore";
+import { useAuthStore } from "../../store/useAuthStore";
+import { getApiUrl } from "../../utils/apiConfig";
 
 const createSchema = z.object({
   title: z.string().min(5, "Tiêu đề ít nhất 5 ký tự").max(100, "Tối đa 100 ký tự"),
   description: z.string().max(1000, "Mô tả tối đa 1000 ký tự").optional(),
-  category: z.enum(["design", "art", "photo", "3d", "other"], { required_error: "Vui lòng chọn danh mục" }),
+  category: z.enum(["design", "art", "photo", "3d", "other"], { message: "Vui lòng chọn danh mục" }),
   tags: z.string().optional(),
 });
 
@@ -19,35 +20,71 @@ type CreateFormValues = z.infer<typeof createSchema>;
 
 export default function CreatePortfolioPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
-  const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+  const { isAuthenticated, isHydrated, accessToken } = useAuthStore();
 
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [colors, setColors] = useState<string[]>(["#0f172a", "#3b82f6", "#f472b6"]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [apiError, setApiError] = useState("");
-  
+
   // AI State
   const [aiAnalysis, setAiAnalysis] = useState("");
+  const [aiError, setAiError] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  const { register, handleSubmit, formState: { errors }, control } = useForm<CreateFormValues>({
+  const { register, handleSubmit, formState: { errors } } = useForm<CreateFormValues>({
     resolver: zodResolver(createSchema),
     defaultValues: { category: "design", tags: "" }
   });
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (!file.type.startsWith("image/")) {
-        setApiError("Vui lòng chọn file ảnh (jpg, png, webp, gif)");
-        return;
-      }
-      setImageFile(file);
-      setImagePreview(URL.createObjectURL(file));
-      setApiError("");
+  useEffect(() => {
+    if (isHydrated && !isAuthenticated) {
+      router.replace("/login?next=/portfolio/create");
     }
+  }, [isHydrated, isAuthenticated, router]);
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const validFiles: File[] = [];
+    const invalidFiles: string[] = [];
+
+    files.forEach((file) => {
+      if (!file.type.startsWith("image/")) {
+        invalidFiles.push(file.name);
+      } else {
+        validFiles.push(file);
+      }
+    });
+
+    if (invalidFiles.length > 0) {
+      setApiError(`File không hợp lệ: ${invalidFiles.join(", ")}. Chỉ hỗ trợ ảnh.`);
+      return;
+    }
+
+    if (imageFiles.length + validFiles.length > 5) {
+      setApiError("Bạn chỉ được tải lên tối đa 5 ảnh.");
+      return;
+    }
+
+    const newFiles = [...imageFiles, ...validFiles];
+    const newPreviews = [...imagePreviews, ...validFiles.map(file => URL.createObjectURL(file))];
+
+    setImageFiles(newFiles);
+    setImagePreviews(newPreviews);
+    setApiError("");
+  };
+
+  const handleRemoveImage = (index: number) => {
+    URL.revokeObjectURL(imagePreviews[index]);
+
+    const newFiles = imageFiles.filter((_, i) => i !== index);
+    const newPreviews = imagePreviews.filter((_, i) => i !== index);
+
+    setImageFiles(newFiles);
+    setImagePreviews(newPreviews);
   };
 
   const handleColorChange = (index: number, newColor: string) => {
@@ -57,39 +94,39 @@ export default function CreatePortfolioPage() {
   };
 
   const analyzePaletteWithAI = async () => {
-    if (!token) return;
+    if (!accessToken) return;
     setIsAnalyzing(true);
+    setAiError("");
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-      const res = await fetch(`${apiUrl}/ai/analyze-palette`, {
+      const res = await fetch(getApiUrl("ai/analyze-palette"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
+          "Authorization": `Bearer ${accessToken}`
         },
         body: JSON.stringify({ colors })
       });
-      
+
       const data = await res.json();
       if (res.ok) {
         setAiAnalysis(data.analysis);
       } else {
-        alert(data.message || "Lỗi khi gọi AI");
+        setAiError(data.message || "Không thể phân tích bảng màu.");
       }
     } catch (e) {
-      alert("Lỗi khi kết nối với AI Server");
+      setAiError("Không kết nối được AI server.");
     } finally {
       setIsAnalyzing(false);
     }
   };
 
   const onSubmit = async (values: CreateFormValues) => {
-    if (!isAuthenticated || !token) {
-      setApiError("Vui lòng đăng nhập để đăng tác phẩm.");
+    if (!isAuthenticated || !accessToken) {
+      router.replace("/login?next=/portfolio/create");
       return;
     }
 
-    if (!imageFile) {
+    if (imageFiles.length === 0) {
       setApiError("Bạn phải chọn ít nhất 1 ảnh làm tác phẩm.");
       return;
     }
@@ -102,24 +139,25 @@ export default function CreatePortfolioPage() {
       formData.append("title", values.title);
       formData.append("description", values.description || "");
       formData.append("category", values.category);
-      
+
       // Parse tags từ string (comma separated)
       if (values.tags) {
         const tagArray = values.tags.split(",").map(t => t.trim()).filter(Boolean);
         tagArray.forEach(t => formData.append("tags", t)); // Gửi mảng tags
       }
 
-      // Đính kèm màu
-      colors.forEach(c => formData.append("colors", c));
+      // Note: colors field is omitted because the backend automatically extracts colors 
+      // from the first image and Joi createValidation rejects "colors" as an unallowed field.
 
       // File ảnh
-      formData.append("image", imageFile);
+      imageFiles.forEach(file => {
+        formData.append("images", file);
+      });
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-      const res = await fetch(`${apiUrl}/portfolios`, {
+      const res = await fetch(getApiUrl("portfolios"), {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${token}`
+          "Authorization": `Bearer ${accessToken}`
         },
         body: formData,
       });
@@ -224,7 +262,12 @@ export default function CreatePortfolioPage() {
                   />
                 ))}
               </div>
-              
+              {aiError && (
+                <p className="mt-3 rounded-lg border border-danger/30 bg-danger/10 p-3 text-sm font-semibold text-danger">
+                  {aiError}
+                </p>
+              )}
+
               {/* Kết quả AI */}
               {aiAnalysis && (
                 <div className="mt-4 text-sm text-foreground bg-surface p-4 rounded-lg border border-primary/30 whitespace-pre-wrap leading-relaxed">
@@ -237,41 +280,58 @@ export default function CreatePortfolioPage() {
 
           {/* Cột Phải: Upload File */}
           <div className="flex flex-col gap-6">
-            <span className="label">File Tác Phẩm (Tối đa 10MB) *</span>
-            <div className="relative flex min-h-[400px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-primary/50 bg-surface-soft p-6 text-center transition-colors hover:bg-primary/5">
-              {imagePreview ? (
-                <>
-                  <img src={imagePreview} alt="Preview" className="max-h-full max-w-full rounded-lg object-contain shadow-lg" />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setImageFile(null);
-                      setImagePreview(null);
-                    }}
-                    className="absolute right-4 top-4 rounded-full bg-black/60 p-1.5 text-white backdrop-blur-md hover:bg-danger"
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
-                </>
-              ) : (
-                <>
-                  <Upload className="mb-4 h-12 w-12 text-primary" />
-                  <p className="text-sm font-semibold">Kéo thả ảnh hoặc click để chọn</p>
-                  <p className="mt-1 text-xs text-muted">Hỗ trợ JPG, PNG, WEBP (Max: 10MB)</p>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageChange}
-                    className="absolute inset-0 cursor-pointer opacity-0"
-                  />
-                </>
-              )}
-            </div>
+            <span className="label">File Tác Phẩm (Tối đa 5 ảnh, tối đa 10MB/ảnh) *</span>
+
+            {imagePreviews.length === 0 ? (
+              <div className="relative flex min-h-[300px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-primary/50 bg-surface-soft p-6 text-center transition-colors hover:bg-primary/5">
+                <Upload className="mb-4 h-12 w-12 text-primary" />
+                <p className="text-sm font-semibold">Kéo thả ảnh hoặc click để chọn</p>
+                <p className="mt-1 text-xs text-muted">Hỗ trợ JPG, PNG, WEBP (Tối đa 5 ảnh)</p>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={handleImageChange}
+                  className="absolute inset-0 cursor-pointer opacity-0"
+                />
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                {imagePreviews.map((preview, index) => (
+                  <div key={index} className="relative aspect-video rounded-xl border border-border bg-surface-soft overflow-hidden group">
+                    <img src={preview} alt={`Preview ${index + 1}`} className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveImage(index)}
+                      className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 text-white backdrop-blur-md hover:bg-danger transition-colors opacity-0 group-hover:opacity-100"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                    <div className="absolute bottom-2 left-2 px-2 py-0.5 text-[10px] font-bold bg-black/60 text-white rounded-md">
+                      Ảnh {index + 1}
+                    </div>
+                  </div>
+                ))}
+                {imageFiles.length < 5 && (
+                  <div className="relative aspect-video rounded-xl border-2 border-dashed border-primary/40 bg-surface-soft hover:bg-primary/5 transition-colors flex flex-col items-center justify-center cursor-pointer">
+                    <Upload className="h-6 w-6 text-primary mb-1" />
+                    <span className="text-xs font-semibold text-muted">Thêm ảnh ({imageFiles.length}/5)</span>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={handleImageChange}
+                      className="absolute inset-0 opacity-0 cursor-pointer"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="mt-auto pt-6 border-t border-border">
               <button
                 type="submit"
-                disabled={isSubmitting || !imageFile}
+                disabled={isSubmitting || imageFiles.length === 0}
                 className="btn btn-primary w-full h-12 text-base"
               >
                 {isSubmitting ? (

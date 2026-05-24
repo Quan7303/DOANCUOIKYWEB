@@ -9,5 +9,5 @@ type PortfolioPageProps = {
 export default async function PortfolioPage({ params }: PortfolioPageProps) {
   const { id } = await params;
 
-  return <PortfolioDetailClient id={id} />;
+  return <PortfolioDetailClient portfolioId={id} />;
 }

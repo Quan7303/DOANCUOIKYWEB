@@ -1,12 +1,12 @@
 import Link from "next/link";
 
 const footerLinks = [
-  { href: "/", label: "Trang chủ" },
-  { href: "/portfolios", label: "Khám phá" },
-  { href: "/about", label: "Giới thiệu" },
-  { href: "/contact", label: "Liên hệ" },
+  { href: "/", label: "Trang chu" },
+  { href: "/portfolios", label: "Kham pha" },
+  { href: "/about", label: "Gioi thieu" },
+  { href: "/contact", label: "Lien he" },
   { href: "/dashboard", label: "Dashboard" },
-  { href: "/login", label: "Đăng nhập" },
+  { href: "/login", label: "Dang nhap" },
 ];
 
 export default function Footer() {
@@ -15,25 +15,23 @@ export default function Footer() {
   return (
     <footer className="border-t border-border bg-surface">
       <div className="app-container grid gap-6 py-8 sm:grid-cols-[1fr_auto]">
-        {/* Brand */}
         <div className="grid gap-3">
           <Link href="/" className="flex items-center gap-2 font-bold">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-sm text-white">
+            <span className="grid h-8 w-8 place-items-center rounded-md bg-primary text-sm text-white">
               A
             </span>
             <span>Artfolio</span>
           </Link>
           <p className="max-w-xs text-sm leading-relaxed text-muted">
-            Nền tảng portfolio sáng tạo dành cho cộng đồng designer, artist và photographer Việt Nam.
+            Nen tang portfolio sang tao danh cho designer, artist va photographer.
           </p>
           <p className="text-xs text-muted">
-            Môn INT1334 · CreativePortfolio Frontend Handoff · {year}
+            INT1334 - CreativePortfolio - {year}
           </p>
         </div>
 
-        {/* Nav */}
         <nav className="grid h-fit gap-2">
-          <p className="text-xs font-bold uppercase text-muted">Điều hướng</p>
+          <p className="text-xs font-bold uppercase text-muted">Dieu huong</p>
           {footerLinks.map((link) => (
             <Link
               key={link.href}
@@ -46,11 +44,10 @@ export default function Footer() {
         </nav>
       </div>
 
-      {/* Bottom bar */}
       <div className="border-t border-border">
         <div className="app-container flex flex-col gap-2 py-4 text-xs text-muted sm:flex-row sm:items-center sm:justify-between">
-          <span>© {year} Artfolio. Dự án học thuật – không phát hành thương mại.</span>
-          <span>Built with Next.js · Tailwind CSS · TypeScript</span>
+          <span>(c) {year} Artfolio. Du an hoc tap.</span>
+          <span>Next.js - Tailwind CSS - TypeScript</span>
         </div>
       </div>
     </footer>

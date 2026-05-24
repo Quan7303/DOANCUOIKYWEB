@@ -13,11 +13,17 @@ export default function ProfileHeader({
     <div className="surface rounded-2xl p-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
-          <img
-            src={user.avatar || "/next.svg"}
-            alt={user.name}
-            className="h-16 w-16 rounded-full object-cover"
-          />
+          {user.avatar && user.avatar !== "default-avatar.png" ? (
+            <img
+              src={user.avatar}
+              alt={user.name}
+              className="h-16 w-16 rounded-full object-cover"
+            />
+          ) : (
+            <span className="grid h-16 w-16 place-items-center rounded-full bg-primary text-xl font-bold text-white animate-pulse">
+              {user.name.slice(0, 1).toUpperCase()}
+            </span>
+          )}
 
           <div>
             <p className="text-sm font-bold uppercase text-primary">

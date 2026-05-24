@@ -11,5 +11,5 @@ export default async function ModalPortfolioPage({
 }: ModalPortfolioPageProps) {
   const { id } = await params;
 
-  return <PortfolioDetailClient id={id} mode="modal" />;
+  return <PortfolioDetailClient portfolioId={id} />;
 }
