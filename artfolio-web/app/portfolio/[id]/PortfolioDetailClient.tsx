@@ -23,6 +23,7 @@ import { getApiUrl, getSocketUrl } from "../../utils/apiConfig";
 
 type PortfolioDetailClientProps = {
   portfolioId: string;
+  mode?: "page" | "modal";
 };
 
 type Comment = {
@@ -77,10 +78,12 @@ function getInitials(name: string) {
 
 export default function PortfolioDetailClient({
   portfolioId,
+  mode = "page",
 }: PortfolioDetailClientProps) {
   const { user: currentUser, isAuthenticated, accessToken } = useAuthStore();
   const currentUserId = getUserId(currentUser);
   const router = useRouter();
+  const isModal = mode === "modal";
 
   const [portfolio, setPortfolio] = useState<PortfolioDetail | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -205,19 +208,12 @@ const isLiked = optimisticLiked ?? serverIsLiked;
     const lastViewedAt = Number(sessionStorage.getItem(viewKey) || 0);
     const now = Date.now();
 
-    // Chặn gọi trùng trong thời gian ngắn.
-    // Sau 5 giây mở lại bài viết vẫn có thể tính lượt xem mới.
     if (now - lastViewedAt < 5000) return;
 
-    const timer = window.setTimeout(async () => {
+    sessionStorage.setItem(viewKey, String(now));
+
+    async function increaseView() {
       try {
-        const latestViewedAt = Number(sessionStorage.getItem(viewKey) || 0);
-        const currentTime = Date.now();
-
-        if (currentTime - latestViewedAt < 5000) return;
-
-        sessionStorage.setItem(viewKey, String(currentTime));
-
         const response = await fetch(getApiUrl(`portfolios/${portfolioId}/view`), {
           method: "POST",
           cache: "no-store",
@@ -238,11 +234,9 @@ const isLiked = optimisticLiked ?? serverIsLiked;
       } catch (error) {
         console.error("Increase view error:", error);
       }
-    }, 3000);
+    }
 
-    return () => {
-      window.clearTimeout(timer);
-    };
+    increaseView();
   }, [portfolioId]);
 
   async function handleToggleLike() {
@@ -415,7 +409,13 @@ const isLiked = optimisticLiked ?? serverIsLiked;
 
   if (isLoading) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-background">
+      <main
+        className={
+          isModal
+            ? "flex min-h-[70vh] items-center justify-center bg-background"
+            : "flex min-h-screen items-center justify-center bg-background"
+        }
+      >
         <StateBlock type="loading" title="Đang tải tác phẩm..." />
       </main>
     );
@@ -423,7 +423,13 @@ const isLiked = optimisticLiked ?? serverIsLiked;
 
   if (errorMessage || !portfolio) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-background">
+      <main
+        className={
+          isModal
+            ? "flex min-h-[70vh] items-center justify-center bg-background"
+            : "flex min-h-screen items-center justify-center bg-background"
+        }
+      >
         <StateBlock
           type="error"
           title="Không tìm thấy tác phẩm"
@@ -436,16 +442,30 @@ const isLiked = optimisticLiked ?? serverIsLiked;
   }
 
   return (
-    <main className="min-h-screen bg-background">
-      <div className="sticky top-0 z-40 border-b border-border bg-surface/90 backdrop-blur">
-        <div className="app-container flex h-16 items-center justify-between gap-4">
-          <Link
-            href="/portfolios"
-            className="inline-flex items-center gap-2 text-sm font-bold text-muted transition hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Khám phá
-          </Link>
+    <main className={isModal ? "bg-background" : "min-h-screen bg-background"}>
+      <div
+        className={
+          isModal
+            ? "border-b border-border bg-surface/90 backdrop-blur"
+            : "sticky top-0 z-40 border-b border-border bg-surface/90 backdrop-blur"
+        }
+      >
+        <div
+          className={
+            isModal
+              ? "flex h-16 items-center justify-end gap-4 px-5 sm:px-8 lg:px-10"
+              : "app-container flex h-16 items-center justify-between gap-4"
+          }
+        >
+          {!isModal && (
+            <Link
+              href="/portfolios"
+              className="inline-flex items-center gap-2 text-sm font-bold text-muted transition hover:text-foreground"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Khám phá
+            </Link>
+          )}
 
           <div className="flex items-center gap-3">
             <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted">
@@ -471,7 +491,7 @@ const isLiked = optimisticLiked ?? serverIsLiked;
         </div>
       </div>
 
-      <div className="app-container py-8 lg:py-12">
+      <div className={isModal ? "px-5 py-8 sm:px-8 lg:px-10" : "app-container py-8 lg:py-12"}>
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px] xl:gap-12">
           <div className="grid gap-6">
             <motion.header

@@ -2,7 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import {
+  usePathname,
+  useRouter,
+  useSelectedLayoutSegment,
+} from "next/navigation";
 import { Menu, Moon, Plus, Sun, UserRound, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuthStore } from "../store/useAuthStore";
@@ -17,23 +21,64 @@ const publicLinks = [
   { href: "/portfolios", label: "Kham pha" },
 ];
 
-function isActive(pathname: string, href: string) {
-  if (href === "/") return pathname === "/";
+function isPortfolioDetailPath(pathname: string) {
+  return (
+    pathname.startsWith("/portfolio/") &&
+    !pathname.startsWith("/portfolio/create") &&
+    !pathname.startsWith("/portfolio/edit")
+  );
+}
+
+function isActive(
+  pathname: string,
+  href: string,
+  selectedSegment: string | null,
+) {
+  const isPortfolioDetail = isPortfolioDetailPath(pathname);
+
+  if (href === "/") {
+    return pathname === "/" || (isPortfolioDetail && selectedSegment === null);
+  }
+
+  if (href === "/portfolios") {
+    return (
+      pathname === "/portfolios" ||
+      selectedSegment === "portfolios" ||
+      (isPortfolioDetail && selectedSegment === "portfolio")
+    );
+  }
+
+  if (href === "/portfolio/create") {
+    return pathname === "/portfolio/create";
+  }
+
+  if (href === "/dashboard") {
+    return (
+      pathname.startsWith("/dashboard") ||
+      (isPortfolioDetail && selectedSegment === "dashboard")
+    );
+  }
+
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 export default function Navbar() {
   const router = useRouter();
   const pathname = usePathname();
+  const selectedSegment = useSelectedLayoutSegment();
   const [isOpen, setIsOpen] = useState(false);
   const { theme, hasHydrated, toggleTheme } = useThemeStore();
   const { user, isAuthenticated, isHydrated, accessToken, fetchMe, logout } =
     useAuthStore();
   const currentUser = isHydrated && isAuthenticated ? user : null;
   const signedIn = Boolean(currentUser);
+  const profileHref = currentUser
+    ? `/profile/${currentUser._id || currentUser.id}`
+    : "/login";
+
   const createHref = signedIn
-    ? "/dashboard?tab=upload"
-    : `/login?next=${encodeURIComponent("/dashboard?tab=upload")}`;
+    ? "/portfolio/create"
+    : `/login?next=${encodeURIComponent("/portfolio/create")}`;
   const themeLabel = hasHydrated && theme === "dark" ? "Che do sang" : "Che do toi";
 
   const handleLogout = async () => {
@@ -73,8 +118,8 @@ export default function Navbar() {
   const linkClass = (href: string) =>
     [
       "rounded-md px-3 py-2 text-sm font-semibold transition",
-      isActive(pathname, href)
-        ? "bg-surface-soft text-foreground"
+      isActive(pathname, href, selectedSegment)
+        ? "bg-primary text-white shadow-sm"
         : "text-muted hover:bg-surface-soft hover:text-foreground",
     ].join(" ");
 
@@ -94,7 +139,7 @@ export default function Navbar() {
               {link.label}
             </Link>
           ))}
-          <Link href={createHref} className={linkClass("/dashboard")}>
+          <Link href={createHref} className={linkClass("/portfolio/create")}>
             Dang tac pham
           </Link>
           {signedIn && (
@@ -131,7 +176,7 @@ export default function Navbar() {
             {signedIn ? (
               <>
                 <Link
-                  href="/dashboard?tab=profile"
+                  href={profileHref}
                   className="flex max-w-[190px] items-center gap-2 rounded-md px-2 py-1.5 text-sm font-semibold hover:bg-surface-soft"
                 >
                   {currentUser?.avatar && currentUser.avatar !== "default-avatar.png" ? (
@@ -169,7 +214,11 @@ export default function Navbar() {
             )}
           </div>
 
-          <Link href={createHref} className="btn btn-primary h-10 w-10 px-0 md:hidden" aria-label="Dang tac pham">
+          <Link
+            href={createHref}
+            className="btn btn-primary h-10 w-10 px-0 md:hidden"
+            aria-label="Dang tac pham"
+          >
             <Plus className="h-4 w-4" aria-hidden />
           </Link>
 
@@ -200,7 +249,7 @@ export default function Navbar() {
             ))}
             <Link
               href={createHref}
-              className={linkClass("/dashboard")}
+              className={linkClass("/portfolio/create")}
               onClick={() => setIsOpen(false)}
             >
               Dang tac pham
@@ -219,7 +268,7 @@ export default function Navbar() {
               {signedIn ? (
                 <>
                   <Link
-                    href="/dashboard?tab=profile"
+                    href={profileHref}
                     className="flex items-center gap-2 rounded-md px-3 py-3 text-sm font-semibold"
                     onClick={() => setIsOpen(false)}
                   >

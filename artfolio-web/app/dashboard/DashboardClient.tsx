@@ -18,7 +18,7 @@ import {
   profileActionSchema,
   type ProfileActionValues,
 } from "../utils/validationSchemas";
-import DashboardUploadForm from "./DashboardUploadForm";
+
 import { api } from "../utils/api";
 
 type DashboardClientProps = {
@@ -26,10 +26,9 @@ type DashboardClientProps = {
   myPortfolios: PortfolioDetail[];
 };
 
-type DashboardTab = "profile" | "upload" | "portfolios" | "export";
+type DashboardTab = "profile" | "portfolios" | "export";
 
 function getValidDashboardTab(tab: string | null): DashboardTab {
-  if (tab === "upload") return "upload";
   if (tab === "portfolios") return "portfolios";
   if (tab === "export") return "export";
   return "profile";
@@ -112,11 +111,10 @@ export default function DashboardClient({
   const currentTab = searchParams.get("tab");
   const activeTab = getValidDashboardTab(currentTab);
 
-  const [portfolios, setPortfolios] = useState<PortfolioDetail[]>(() =>
-    mergePortfolios(myPortfolios),
+  const portfolios = useMemo(
+    () => mergePortfolios(myPortfolios),
+    [myPortfolios],
   );
-
-  const [toastMessage, setToastMessage] = useState("");
 
   function handleChangeTab(tab: DashboardTab) {
     router.replace(`/dashboard?tab=${tab}`, { scroll: false });
@@ -182,17 +180,6 @@ export default function DashboardClient({
   };
 
 
-  const handleCreatedPortfolio = (portfolio: PortfolioDetail) => {
-    setPortfolios((current) => mergePortfolios([portfolio, ...current]));
-
-    setToastMessage("Đăng tác phẩm thành công.");
-    handleChangeTab("portfolios");
-
-    window.setTimeout(() => {
-      setToastMessage("");
-    }, 2500);
-  };
-
   const pdfProfile: PortfolioPdfProfile = {
     name: user.name,
     email: user.email,
@@ -209,7 +196,6 @@ export default function DashboardClient({
 
   const tabs = [
     { key: "profile" as const, label: "Hồ sơ" },
-    { key: "upload" as const, label: "Đăng tác phẩm" },
     { key: "portfolios" as const, label: `Tác phẩm (${portfolios.length})` },
     { key: "export" as const, label: "Xuất PDF" },
   ];
@@ -226,17 +212,12 @@ export default function DashboardClient({
               Không gian cá nhân
             </h1>
             <p className="mt-2 max-w-2xl text-sm text-muted">
-              Quản lý hồ sơ, đăng tác phẩm mới, xem danh sách portfolio cá nhân
-              và xuất hồ sơ sáng tạo ra PDF.
+              Quản lý hồ sơ, xem danh sách portfolio cá nhân và xuất hồ sơ sáng tạo ra PDF.
             </p>
           </div>
 
         </div>
-        {toastMessage && (
-          <div className="mb-5 rounded-lg border border-border bg-surface-soft p-3 text-sm font-semibold text-foreground">
-            {toastMessage}
-          </div>
-        )}
+
         <div className="grid min-w-0 gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
           <aside className="grid h-fit min-w-0 gap-4">
             {activeTab === "profile" && (
@@ -432,13 +413,6 @@ export default function DashboardClient({
               </div>
             )}
 
-            {activeTab === "upload" && (
-              <DashboardUploadForm
-                user={user}
-                onCreated={handleCreatedPortfolio}
-              />
-            )}
-
             {activeTab === "portfolios" && (
               <div className="grid gap-4">
                 <div className="surface flex flex-col gap-3 rounded-lg p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -452,7 +426,7 @@ export default function DashboardClient({
                   <button
                     type="button"
                     className="btn btn-primary text-sm"
-                    onClick={() => handleChangeTab("upload")}
+                    onClick={() => router.push("/portfolio/create")}
                   >
                     Thêm tác phẩm
                   </button>
@@ -468,7 +442,7 @@ export default function DashboardClient({
                     <button
                       type="button"
                       className="btn btn-primary mt-5"
-                      onClick={() => handleChangeTab("upload")}
+                      onClick={() => router.push("/portfolio/create")}
                     >
                       Upload your first shot
                     </button>
