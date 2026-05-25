@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import SignupPage from "./SignupPage";
 
 export const metadata: Metadata = {
-  title: "Dang ky",
-  description: "Tao tai khoan Artfolio de chia se portfolio sang tao cua ban.",
+  title: "Đăng ký",
+  description: "Tạo tài khoản Artfolio để chia sẻ portfolio sáng tạo của bạn.",
 };
 
 type PageProps = {

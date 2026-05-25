@@ -17,8 +17,8 @@ import NotificationDropdown, {
 } from "./NotificationDropdown";
 
 const publicLinks = [
-  { href: "/", label: "Trang chu" },
-  { href: "/portfolios", label: "Kham pha" },
+  { href: "/", label: "Trang chủ" },
+  { href: "/portfolios", label: "Khám phá" },
 ];
 
 function isPortfolioDetailPath(pathname: string) {
@@ -79,7 +79,7 @@ export default function Navbar() {
   const createHref = signedIn
     ? "/portfolio/create"
     : `/login?next=${encodeURIComponent("/portfolio/create")}`;
-  const themeLabel = hasHydrated && theme === "dark" ? "Che do sang" : "Che do toi";
+  const themeLabel = hasHydrated && theme === "dark" ? "Chế độ sáng" : "Chế độ tối";
 
   const handleLogout = async () => {
     await logout();
@@ -140,7 +140,7 @@ export default function Navbar() {
             </Link>
           ))}
           <a href={createHref} className={linkClass("/portfolio/create")}>
-            Dang tac pham
+            Đăng tác phẩm
           </a>
           {signedIn && (
             <Link href="/dashboard?tab=profile" className={linkClass("/dashboard")}>
@@ -199,16 +199,16 @@ export default function Navbar() {
                   onClick={handleLogout}
                   className="btn btn-secondary text-sm"
                 >
-                  Dang xuat
+                  Đăng xuất
                 </button>
               </>
             ) : (
               <>
                 <Link href="/login" className="btn btn-secondary">
-                  Dang nhap
+                  Đăng nhập
                 </Link>
                 <Link href="/signup" className="btn btn-primary">
-                  Dang ky
+                  Đăng ký
                 </Link>
               </>
             )}
@@ -217,7 +217,7 @@ export default function Navbar() {
           <a
             href={createHref}
             className="btn btn-primary h-10 w-10 px-0 md:hidden"
-            aria-label="Dang tac pham"
+            aria-label="Đăng tác phẩm"
           >
             <Plus className="h-4 w-4" aria-hidden />
           </a>
@@ -227,7 +227,7 @@ export default function Navbar() {
             className="btn btn-secondary h-10 w-10 px-0 md:hidden"
             onClick={() => setIsOpen((value) => !value)}
             aria-expanded={isOpen}
-            aria-label="Mo menu"
+            aria-label="Mở menu"
           >
             {isOpen ? <X className="h-4 w-4" aria-hidden /> : <Menu className="h-4 w-4" aria-hidden />}
           </button>
@@ -252,7 +252,7 @@ export default function Navbar() {
               className={linkClass("/portfolio/create")}
               onClick={() => setIsOpen(false)}
             >
-              Dang tac pham
+              Đăng tác phẩm
             </a>
             {signedIn && (
               <Link
@@ -290,7 +290,7 @@ export default function Navbar() {
                     className="w-full rounded-md bg-surface-soft px-3 py-3 text-left text-sm font-semibold text-danger"
                     onClick={handleLogout}
                   >
-                    Dang xuat
+                    Đăng xuất
                   </button>
                 </>
               ) : (
@@ -300,14 +300,14 @@ export default function Navbar() {
                     className="btn btn-secondary w-full"
                     onClick={() => setIsOpen(false)}
                   >
-                    Dang nhap
+                    Đăng nhập
                   </Link>
                   <Link
                     href="/signup"
                     className="btn btn-primary w-full"
                     onClick={() => setIsOpen(false)}
                   >
-                    Dang ky
+                    Đăng ký
                   </Link>
                 </div>
               )}
