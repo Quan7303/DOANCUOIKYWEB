@@ -1,7 +1,7 @@
 import PortfolioGrid from "./components/PortfolioGrid";
 import { getFeaturedPortfolios } from "./data/portfolios";
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 60;
 
 export default async function Home() {
   const portfolios = await getFeaturedPortfolios();

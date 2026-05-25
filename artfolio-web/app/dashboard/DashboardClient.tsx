@@ -423,13 +423,12 @@ export default function DashboardClient({
                     </p>
                   </div>
 
-                  <button
-                    type="button"
+                  <a
+                    href="/portfolio/create"
                     className="btn btn-primary text-sm"
-                    onClick={() => router.push("/portfolio/create")}
                   >
                     Thêm tác phẩm
-                  </button>
+                  </a>
                 </div>
 
                 {portfolios.length === 0 ? (
@@ -439,13 +438,12 @@ export default function DashboardClient({
                       Hãy đăng tác phẩm đầu tiên để xây dựng portfolio cá nhân.
                     </p>
 
-                    <button
-                      type="button"
+                    <a
+                      href="/portfolio/create"
                       className="btn btn-primary mt-5"
-                      onClick={() => router.push("/portfolio/create")}
                     >
                       Upload your first shot
-                    </button>
+                    </a>
                   </div>
                 ) : (
                   <div className="grid gap-4 sm:grid-cols-2">

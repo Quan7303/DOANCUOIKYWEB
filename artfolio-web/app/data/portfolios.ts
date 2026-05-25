@@ -58,15 +58,25 @@ function normalizePortfolio(item: RawPortfolio): PortfolioSummary {
   };
 }
 
-export async function getPortfolios(limit = 24): Promise<PortfolioSummary[]> {
+type PortfolioFetchOptions = {
+  revalidate?: number;
+};
+
+export async function getPortfolios(
+  limit = 24,
+  options: PortfolioFetchOptions = {},
+): Promise<PortfolioSummary[]> {
   try {
     const url = getApiUrl(`portfolios?page=1&limit=${limit}`);
 
     console.log("Fetching portfolios from:", url);
 
-    const res = await fetch(url, {
-      cache: "no-store",
-    });
+    const res = await fetch(
+      url,
+      options.revalidate
+        ? { next: { revalidate: options.revalidate } }
+        : { cache: "no-store" },
+    );
 
     console.log("Portfolio API status:", res.status);
 
@@ -86,5 +96,5 @@ export async function getPortfolios(limit = 24): Promise<PortfolioSummary[]> {
 }
 
 export async function getFeaturedPortfolios(): Promise<PortfolioSummary[]> {
-  return getPortfolios(8);
+  return getPortfolios(8, { revalidate: 60 });
 }

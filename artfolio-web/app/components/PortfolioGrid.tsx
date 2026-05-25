@@ -1,12 +1,11 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Eye, Heart } from "lucide-react";
 import type { PortfolioCategory, PortfolioSummary } from "../types/api";
-import PortfolioModalShell from "./PortfolioModalShell";
-import PortfolioDetailClient from "../portfolio/[id]/PortfolioDetailClient";
 
 type PortfolioGridProps = {
   portfolios: PortfolioSummary[];
@@ -46,11 +45,9 @@ function PortfolioSkeleton() {
 function PortfolioCard({
   portfolio,
   index,
-  onOpen,
 }: {
   portfolio: PortfolioSummary;
   index: number;
-  onOpen: (id: string) => void;
 }) {
   const heights = [
     "aspect-[4/3]",
@@ -72,9 +69,9 @@ function PortfolioCard({
       transition={{ duration: 0.4, delay: index * 0.05 }}
       className="masonry-item"
     >
-      <button
-        type="button"
-        onClick={() => onOpen(getPortfolioId(portfolio))}
+      <Link
+        href={`/portfolio/${getPortfolioId(portfolio)}`}
+        scroll={false}
         className="group block h-full w-full text-left"
         aria-label={`Xem tác phẩm ${portfolio.title}`}
       >
@@ -143,7 +140,7 @@ function PortfolioCard({
             </div>
           </div>
         </article>
-      </button>
+      </Link>
     </motion.div>
   );
 }
@@ -156,9 +153,6 @@ export default function PortfolioGrid({
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<PortfolioCategory | "all">("all");
   const [tag, setTag] = useState("all");
-  const [selectedPortfolioId, setSelectedPortfolioId] = useState<string | null>(
-    null,
-  );
 
   const tags = useMemo(
     () =>
@@ -276,7 +270,6 @@ export default function PortfolioGrid({
                   key={portfolio._id}
                   portfolio={portfolio}
                   index={index}
-                  onOpen={setSelectedPortfolioId}
                 />
               ))}
             </AnimatePresence>
@@ -284,11 +277,6 @@ export default function PortfolioGrid({
         )}
       </div>
 
-      {selectedPortfolioId && (
-        <PortfolioModalShell onClose={() => setSelectedPortfolioId(null)}>
-          <PortfolioDetailClient portfolioId={selectedPortfolioId} mode="modal" />
-        </PortfolioModalShell>
-      )}
     </>
   );
 }
