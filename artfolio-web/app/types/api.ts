@@ -22,6 +22,17 @@ export type PortfolioDetail = PortfolioSummary & {
   createdAt: string;
 };
 
+export type PortfolioComment = {
+  _id: string;
+  user: {
+    _id: string;
+    name: string;
+    avatar?: string;
+  };
+  text: string;
+  createdAt: string;
+};
+
 export type ApiListResponse<T> = {
   status: "success";
   results: number;

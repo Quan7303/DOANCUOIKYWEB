@@ -17,7 +17,11 @@ export const signupSchema = z.object({
     .string()
     .min(1, "Vui long nhap email")
     .email("Email khong dung dinh dang"),
-  password: z.string().min(6, "Mat khau phai co it nhat 6 ky tu"),
+  password: z
+    .string()
+    .min(8, "Mat khau phai co it nhat 8 ky tu")
+    .regex(/[A-Za-z]/, "Mat khau can co it nhat 1 chu cai")
+    .regex(/[0-9]/, "Mat khau can co it nhat 1 chu so"),
 });
 
 export const profileActionSchema = z.object({

@@ -139,9 +139,9 @@ export default function Navbar() {
               {link.label}
             </Link>
           ))}
-          <Link href={createHref} className={linkClass("/portfolio/create")}>
+          <a href={createHref} className={linkClass("/portfolio/create")}>
             Dang tac pham
-          </Link>
+          </a>
           {signedIn && (
             <Link href="/dashboard?tab=profile" className={linkClass("/dashboard")}>
               Dashboard
@@ -167,7 +167,7 @@ export default function Navbar() {
           {signedIn && accessToken && (
             <NotificationDropdown
               accessToken={accessToken}
-              onUnreadCountChange={() => {}}
+              onUnreadCountChange={() => { }}
               socketNotification={latestSocketNotification}
             />
           )}
@@ -214,13 +214,13 @@ export default function Navbar() {
             )}
           </div>
 
-          <Link
+          <a
             href={createHref}
             className="btn btn-primary h-10 w-10 px-0 md:hidden"
             aria-label="Dang tac pham"
           >
             <Plus className="h-4 w-4" aria-hidden />
-          </Link>
+          </a>
 
           <button
             type="button"
@@ -247,13 +247,13 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
-            <Link
+            <a
               href={createHref}
               className={linkClass("/portfolio/create")}
               onClick={() => setIsOpen(false)}
             >
               Dang tac pham
-            </Link>
+            </a>
             {signedIn && (
               <Link
                 href="/dashboard?tab=profile"

@@ -18,24 +18,18 @@ import { useRouter } from "next/navigation";
 import { io, Socket } from "socket.io-client";
 import StateBlock from "../../components/StateBlock";
 import { useAuthStore } from "../../store/useAuthStore";
-import type { PortfolioDetail } from "../../types/api";
+import type { PortfolioComment, PortfolioDetail } from "../../types/api";
 import { getApiUrl, getSocketUrl } from "../../utils/apiConfig";
 
 type PortfolioDetailClientProps = {
   portfolioId: string;
   mode?: "page" | "modal";
+  initialPortfolio?: PortfolioDetail | null;
+  initialComments?: PortfolioComment[];
+  initialErrorMessage?: string;
 };
 
-type Comment = {
-  _id: string;
-  user: {
-    _id: string;
-    name: string;
-    avatar?: string;
-  };
-  text: string;
-  createdAt: string;
-};
+type Comment = PortfolioComment;
 
 type RawComment = Comment & {
   content?: string;
@@ -79,24 +73,31 @@ function getInitials(name: string) {
 export default function PortfolioDetailClient({
   portfolioId,
   mode = "page",
+  initialPortfolio = null,
+  initialComments = [],
+  initialErrorMessage = "",
 }: PortfolioDetailClientProps) {
   const { user: currentUser, isAuthenticated, accessToken } = useAuthStore();
   const currentUserId = getUserId(currentUser);
   const router = useRouter();
   const isModal = mode === "modal";
 
-  const [portfolio, setPortfolio] = useState<PortfolioDetail | null>(null);
-  const [comments, setComments] = useState<Comment[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [portfolio, setPortfolio] = useState<PortfolioDetail | null>(
+    initialPortfolio,
+  );
+  const [comments, setComments] = useState<Comment[]>(initialComments);
+  const [isLoading, setIsLoading] = useState(
+    !initialPortfolio && !initialErrorMessage,
+  );
 
   const isOwner = useMemo(() => {
     if (!portfolio || !currentUserId) return false;
     const ownerId = portfolio.user?._id;
     return ownerId === currentUserId;
   }, [portfolio, currentUserId]);
-  const [errorMessage, setErrorMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState(initialErrorMessage);
   const [optimisticLiked, setOptimisticLiked] = useState<boolean | null>(null);
-  const [likesCount, setLikesCount] = useState(0);
+  const [likesCount, setLikesCount] = useState(initialPortfolio?.likesCount || 0);
   const [commentText, setCommentText] = useState("");
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [notice, setNotice] = useState("");
@@ -146,6 +147,8 @@ const isLiked = optimisticLiked ?? serverIsLiked;
   }, [portfolioId]);
 
   useEffect(() => {
+    if (initialPortfolio || initialErrorMessage) return;
+
 
     let isMounted = true;
 
@@ -199,7 +202,7 @@ const isLiked = optimisticLiked ?? serverIsLiked;
     return () => {
       isMounted = false;
     };
-  }, [portfolioId]);
+  }, [initialErrorMessage, initialPortfolio, portfolioId]);
 
   useEffect(() => {
     if (!portfolioId) return;
@@ -291,6 +294,10 @@ const isLiked = optimisticLiked ?? serverIsLiked;
     const text = commentText.trim();
     if (text.length < 2) {
       setNotice("Bình luận phải có ít nhất 2 ký tự.");
+      return;
+    }
+    if (text.length > 500) {
+      setNotice("Binh luan khong duoc vuot qua 500 ky tu.");
       return;
     }
 

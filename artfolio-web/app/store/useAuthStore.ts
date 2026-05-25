@@ -18,12 +18,12 @@ type AuthApiResponse = {
   token?: string;
   user?: AuthUser;
   data?:
-    | AuthUser
-    | {
-        accessToken?: string;
-        token?: string;
-        user?: AuthUser;
-      };
+  | AuthUser
+  | {
+    accessToken?: string;
+    token?: string;
+    user?: AuthUser;
+  };
   message?: string;
 };
 
@@ -51,6 +51,28 @@ function normalizeUser(user: AuthUser | null | undefined): AuthUser | null {
     ...user,
     id: user.id || user._id || "",
   };
+}
+
+function getUserIdFromToken(accessToken: string | null) {
+  if (!accessToken) return "";
+
+  try {
+    const [, payload] = accessToken.split(".");
+    if (!payload) return "";
+
+    const normalizedPayload = payload
+      .replace(/-/g, "+")
+      .replace(/_/g, "/")
+      .padEnd(Math.ceil(payload.length / 4) * 4, "=");
+    const decoded = JSON.parse(atob(normalizedPayload)) as {
+      _id?: string;
+      id?: string;
+    };
+
+    return decoded._id || decoded.id || "";
+  } catch {
+    return "";
+  }
 }
 
 function extractAccessToken(data: AuthApiResponse | null): string | null {
@@ -212,8 +234,13 @@ export const useAuthStore = create<AuthState>()(
 
         if (!accessToken) return null;
 
+        const userId =
+          get().user?._id || get().user?.id || getUserIdFromToken(accessToken);
+
+        if (!userId) return null;
+
         try {
-          const data = await requestJson("/api/auth/me", {
+          const data = await requestJson(`/api/users/${userId}`, {
             method: "GET",
             headers: { Authorization: `Bearer ${accessToken}` },
           });
@@ -230,7 +257,14 @@ export const useAuthStore = create<AuthState>()(
           if (!refreshedToken) return null;
 
           try {
-            const retryData = await requestJson("/api/auth/me", {
+            const retryUserId =
+              get().user?._id ||
+              get().user?.id ||
+              getUserIdFromToken(refreshedToken);
+
+            if (!retryUserId) return null;
+
+            const retryData = await requestJson(`/api/users/${retryUserId}`, {
               method: "GET",
               headers: { Authorization: `Bearer ${refreshedToken}` },
             });
