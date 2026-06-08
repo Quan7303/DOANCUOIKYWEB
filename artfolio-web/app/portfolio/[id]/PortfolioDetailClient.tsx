@@ -349,14 +349,6 @@ export default function PortfolioDetailClient({
     setIsEditingPortfolio(true);
   }
 
-  function handleCancelEditPortfolio() {
-    if (hasUnsavedEditChanges) {
-      setShowDiscardEditConfirm(true);
-      return;
-    }
-
-    setIsEditingPortfolio(false);
-  }
 
   function handleDiscardEditChanges() {
     setShowDiscardEditConfirm(false);
