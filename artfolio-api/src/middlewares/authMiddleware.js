@@ -40,3 +40,12 @@ export const protect = async (req, res, next) => {
     return next(new ApiError(401, 'Token không hợp lệ! Vui lòng đăng nhập lại.'))
   }
 }
+
+export const restrictTo = (...roles) => {
+  return (req, res, next) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      return next(new ApiError(403, 'Bạn không có đặc quyền (permission) để thực hiện hành động này.'))
+    }
+    next()
+  }
+}
