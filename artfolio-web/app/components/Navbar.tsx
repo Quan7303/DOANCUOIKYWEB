@@ -48,8 +48,8 @@ function isActive(
     );
   }
 
-  if (href === "/portfolio/create") {
-    return pathname === "/portfolio/create";
+  if (href === "/create") {
+    return pathname === "/create";
   }
 
   if (href === "/dashboard") {
@@ -77,8 +77,8 @@ export default function Navbar() {
     : "/login";
 
   const createHref = signedIn
-    ? "/portfolio/create"
-    : `/login?next=${encodeURIComponent("/portfolio/create")}`;
+    ? "/create"
+    : `/login?next=${encodeURIComponent("/create")}`;
   const themeLabel = hasHydrated && theme === "dark" ? "Chế độ sáng" : "Chế độ tối";
 
   const handleLogout = async () => {
@@ -93,7 +93,7 @@ export default function Navbar() {
   ) => {
     event.preventDefault();
     setIsOpen(false);
-    window.location.assign(createHref);
+    router.push(createHref);
   };
 
   const [latestSocketNotification, setLatestSocketNotification] =
@@ -149,7 +149,7 @@ export default function Navbar() {
           ))}
           <a
             href={createHref}
-            className={linkClass("/portfolio/create")}
+            className={linkClass("/create")}
             onClick={handleCreateNavigation}
           >
             Đăng tác phẩm
@@ -262,7 +262,7 @@ export default function Navbar() {
             ))}
             <a
               href={createHref}
-              className={linkClass("/portfolio/create")}
+              className={linkClass("/create")}
               onClick={handleCreateNavigation}
             >
               Đăng tác phẩm

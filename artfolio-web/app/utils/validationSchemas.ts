@@ -36,6 +36,7 @@ export const profileActionSchema = z.object({
     .string()
     .min(2, "Ten phai co it nhat 2 ky tu")
     .max(60, "Ten toi da 60 ky tu"),
+  portfolioDescription: z.string().max(500, "Gioi thieu toi da 500 ky tu"),
   skills: z.string(),
   experience: z.string(),
   socialLinks: z.string(),

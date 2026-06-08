@@ -11,7 +11,7 @@
  * </script>
  */
 
-const CACHE_NAME = "artfolio-v1";
+const CACHE_NAME = "artfolio-v2";
 const OFFLINE_URL = "/offline";
 
 const STATIC_ASSETS = [
@@ -50,35 +50,56 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  event.respondWith(
-    caches.match(event.request).then((response) => {
-      if (response) {
-        return response;
-      }
+  const isNavigationRequest = event.request.mode === "navigate";
 
-      return fetch(event.request).then((response) => {
-        if (!response || response.status !== 200) {
-          return response;
-        }
-
-        const responseToCache = response.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
-        });
-
-        return response;
-      });
-    })
-      .catch(() => {
-        // Return offline page if network is unavailable
-        return caches.match(OFFLINE_URL) ||
+  if (isNavigationRequest) {
+    event.respondWith(
+      fetch(event.request).catch(() => {
+        return (
+          caches.match(OFFLINE_URL) ||
           new Response("Offline", {
             status: 503,
             statusText: "Service Unavailable",
             headers: new Headers({
               "Content-Type": "text/plain",
             }),
-          });
-      })
+          })
+        );
+      }),
+    );
+    return;
+  }
+
+  const canCache =
+    event.request.destination === "style" ||
+    event.request.destination === "script" ||
+    event.request.destination === "image" ||
+    event.request.destination === "font";
+
+  if (!canCache) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
+  event.respondWith(
+    caches.match(event.request).then((cachedResponse) => {
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+
+      return fetch(event.request).then((networkResponse) => {
+        if (!networkResponse || networkResponse.status !== 200) {
+          return networkResponse;
+        }
+
+        const responseToCache = networkResponse.clone();
+
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(event.request, responseToCache);
+        });
+
+        return networkResponse;
+      });
+    }),
   );
 });

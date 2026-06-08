@@ -10,6 +10,8 @@ import StateBlock from "../../components/StateBlock";
 import ExportPdfButton from "../../components/ExportPdfButton";
 import { useAuthStore } from "../../store/useAuthStore";
 import { getApiUrl } from "../../utils/apiConfig";
+import PortfolioModalShell from "../../components/PortfolioModalShell";
+import PortfolioDetailClient from "../../portfolio/[id]/PortfolioDetailClient";
 
 type ProfileClientProps = {
   userId: string;
@@ -24,6 +26,13 @@ type MongoUser = {
   bio?: string;
   location?: string;
   skills?: string[];
+  experience?: string[];
+  socialLinks?: {
+    github?: string;
+    instagram?: string;
+    behance?: string;
+    linkedin?: string;
+  };
   followersCount: number;
   followingCount: number;
   followers?: string[];
@@ -70,11 +79,12 @@ async function loadProfileData(userId: string): Promise<ProfileState> {
       bio: data.bio || data.portfolioDescription,
       location: data.location,
       skills: data.skills || [],
+      experience: data.experience || [],
+      socialLinks: data.socialLinks || {},
       followersCount: data.followersCount || 0,
       followingCount: data.followingCount || 0,
       followers: data.followers || [],
     };
-
     const portfolios: MongoPortfolio[] = data.portfolios || [];
 
     return { user, portfolios };
@@ -95,6 +105,9 @@ export default function ProfileClient({ userId }: ProfileClientProps) {
   const [errorMessage, setErrorMessage] = useState("");
   const [initialFollowing, setInitialFollowing] = useState(false);
   const [activeTab, setActiveTab] = useState<"works" | "about">("works");
+  const [selectedPortfolioId, setSelectedPortfolioId] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -147,6 +160,50 @@ export default function ProfileClient({ userId }: ProfileClientProps) {
       };
     });
   }
+  function handleOpenPortfolio(portfolioId: string) {
+    setSelectedPortfolioId(portfolioId);
+  }
+
+  function handleClosePortfolio() {
+    setSelectedPortfolioId(null);
+  }
+  useEffect(() => {
+  function handlePortfolioLikeChanged(event: Event) {
+    const customEvent = event as CustomEvent<{
+      portfolioId?: string;
+      likesCount?: number;
+    }>;
+
+    const portfolioId = customEvent.detail?.portfolioId;
+    const likesCount = customEvent.detail?.likesCount;
+
+    if (!portfolioId || typeof likesCount !== "number") return;
+
+    setProfileState((current) => ({
+      ...current,
+      portfolios: current.portfolios.map((portfolio) =>
+        portfolio._id === portfolioId
+          ? {
+              ...portfolio,
+              likesCount,
+            }
+          : portfolio,
+      ),
+    }));
+  }
+
+  window.addEventListener(
+    "artfolio:portfolio-like-changed",
+    handlePortfolioLikeChanged,
+  );
+
+  return () => {
+    window.removeEventListener(
+      "artfolio:portfolio-like-changed",
+      handlePortfolioLikeChanged,
+    );
+  };
+}, []);
 
   if (isLoading) {
     return (
@@ -240,12 +297,12 @@ export default function ProfileClient({ userId }: ProfileClientProps) {
                     title: user.bio || "Thành viên Artfolio",
                     email: user.email,
                     skills: user.skills || [],
-                    experience: [],
-                    socialLinks: [],
-                    works: profileState.portfolios.map(p => ({
-                       title: p.title,
-                       category: p.category,
-                       description: p.description
+                    experience: user.experience || [],
+                    socialLinks: Object.values(user.socialLinks || {}).filter(Boolean),
+                    works: profileState.portfolios.map((p) => ({
+                      title: p.title,
+                      category: p.category,
+                      description: p.description,
                     })),
                   }}
                 />
@@ -302,10 +359,11 @@ export default function ProfileClient({ userId }: ProfileClientProps) {
                 ) : (
                   <div className="masonry-grid">
                     {profileState.portfolios.map((portfolio) => (
-                      <Link
+                      <button
                         key={portfolio._id}
-                        href={`/portfolio/${portfolio._id}`}
-                        className="masonry-item surface group block overflow-hidden rounded-2xl transition-all hover:-translate-y-1 hover:shadow-xl hover:shadow-primary/10"
+                        type="button"
+                        onClick={() => handleOpenPortfolio(portfolio._id)}
+                        className="masonry-item surface group block w-full overflow-hidden rounded-2xl text-left transition-all hover:-translate-y-1 hover:shadow-xl hover:shadow-primary/10"
                       >
                         <div className="aspect-[4/3] w-full overflow-hidden bg-surface-soft">
                           <img
@@ -325,19 +383,24 @@ export default function ProfileClient({ userId }: ProfileClientProps) {
                             ))}
                           </div>
 
-                          <h3 className="text-lg font-bold group-hover:text-primary transition-colors">{portfolio.title}</h3>
+                          <h3 className="text-lg font-bold transition-colors group-hover:text-primary">
+                            {portfolio.title}
+                          </h3>
+
                           {portfolio.description && (
-                             <p className="mt-2 line-clamp-2 text-sm text-muted">
-                               {portfolio.description}
-                             </p>
+                            <p className="mt-2 line-clamp-2 text-sm text-muted">
+                              {portfolio.description}
+                            </p>
                           )}
 
                           <div className="mt-4 flex items-center justify-between border-t border-border/50 pt-4 text-sm text-muted">
-                            <span className="flex items-center gap-1"><HeartIcon className="h-4 w-4" /> {portfolio.likesCount || 0}</span>
+                            <span className="flex items-center gap-1">
+                              <HeartIcon className="h-4 w-4" /> {portfolio.likesCount || 0}
+                            </span>
                             <span>{portfolio.views || 0} lượt xem</span>
                           </div>
                         </div>
-                      </Link>
+                      </button>
                     ))}
                   </div>
                 )}
@@ -370,11 +433,87 @@ export default function ProfileClient({ userId }: ProfileClientProps) {
                     </div>
                   </div>
                 )}
+                {user.experience && user.experience.length > 0 && (
+                  <div className="mt-8">
+                    <h3 className="text-xl font-bold mb-4">Kinh nghiệm</h3>
+                    <ul className="grid gap-3">
+                      {user.experience.map((item) => (
+                        <li
+                          key={item}
+                          className="rounded-lg border border-border bg-surface-soft px-4 py-3 text-sm leading-6 text-muted"
+                        >
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {user.socialLinks &&
+                  Object.values(user.socialLinks).some(Boolean) && (
+                    <div className="mt-8">
+                      <h3 className="text-xl font-bold mb-4">Liên kết cá nhân</h3>
+
+                      <div className="flex flex-wrap gap-3">
+                        {user.socialLinks.github && (
+                          <a
+                            href={user.socialLinks.github}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="btn btn-secondary"
+                          >
+                            GitHub
+                          </a>
+                        )}
+
+                        {user.socialLinks.instagram && (
+                          <a
+                            href={user.socialLinks.instagram}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="btn btn-secondary"
+                          >
+                            Instagram
+                          </a>
+                        )}
+
+                        {user.socialLinks.behance && (
+                          <a
+                            href={user.socialLinks.behance}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="btn btn-secondary"
+                          >
+                            Behance
+                          </a>
+                        )}
+
+                        {user.socialLinks.linkedin && (
+                          <a
+                            href={user.socialLinks.linkedin}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="btn btn-secondary"
+                          >
+                            LinkedIn
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  )}
               </motion.div>
             )}
           </AnimatePresence>
         </section>
       </div>
+      {selectedPortfolioId && (
+        <PortfolioModalShell onClose={handleClosePortfolio}>
+          <PortfolioDetailClient
+            key={selectedPortfolioId}
+            portfolioId={selectedPortfolioId}
+            mode="modal"
+          />
+        </PortfolioModalShell>
+      )}
     </main>
   );
 }

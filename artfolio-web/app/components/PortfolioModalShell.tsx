@@ -2,7 +2,7 @@
 
 import { X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 type PortfolioModalShellProps = {
   children: ReactNode;
@@ -14,8 +14,29 @@ export default function PortfolioModalShell({
   onClose,
 }: PortfolioModalShellProps) {
   const router = useRouter();
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, []);
 
   function closeModal() {
+    if (typeof window !== "undefined") {
+      const closeEvent = new CustomEvent("artfolio:portfolio-modal-close-request", {
+        cancelable: true,
+      });
+
+      window.dispatchEvent(closeEvent);
+
+      if (closeEvent.defaultPrevented) {
+        return;
+      }
+    }
+
     if (onClose) {
       onClose();
       return;

@@ -83,9 +83,15 @@ export type PortfolioPdfProfile = {
   skills: string[];
   experience: string[];
   socialLinks: string[];
+  totalLikes?: number;
+  totalViews?: number;
   works: Array<{
     title: string;
     category: string;
     description?: string;
+    image?: string;
+    likesCount?: number;
+    views?: number;
+    tags?: string[];
   }>;
 };

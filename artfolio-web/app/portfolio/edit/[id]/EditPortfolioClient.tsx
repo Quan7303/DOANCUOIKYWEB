@@ -143,7 +143,9 @@ export default function EditPortfolioClient({
       });
 
       if (response.status === 200) {
-        router.push(`/portfolio/${portfolioId}`);
+        router.push(
+          `/dashboard?tab=portfolios&preview=${encodeURIComponent(portfolioId)}`,
+        );
         router.refresh();
       } else {
         throw new Error(response.data?.message || "Không thể cập nhật tác phẩm.");

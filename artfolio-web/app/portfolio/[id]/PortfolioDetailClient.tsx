@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
+import toast from "react-hot-toast";
 import {
   ArrowLeft,
   CalendarDays,
@@ -13,6 +14,8 @@ import {
   Send,
   Trash2,
   Edit3,
+  Loader2,
+  Save,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { io, Socket } from "socket.io-client";
@@ -21,12 +24,14 @@ import { useAuthStore } from "../../store/useAuthStore";
 import type { PortfolioComment, PortfolioDetail } from "../../types/api";
 import { getApiUrl, getSocketUrl } from "../../utils/apiConfig";
 
+
 type PortfolioDetailClientProps = {
   portfolioId: string;
   mode?: "page" | "modal";
   initialPortfolio?: PortfolioDetail | null;
   initialComments?: PortfolioComment[];
   initialErrorMessage?: string;
+  onDeleted?: (portfolioId: string) => void;
 };
 
 type Comment = PortfolioComment;
@@ -34,6 +39,30 @@ type Comment = PortfolioComment;
 type RawComment = Comment & {
   content?: string;
 };
+type EditFormState = {
+  title: string;
+  description: string;
+  category: PortfolioDetail["category"];
+  tags: string;
+};
+
+function getEditFormStateFromPortfolio(
+  portfolio: PortfolioDetail,
+): EditFormState {
+  return {
+    title: portfolio.title || "",
+    description: portfolio.description || "",
+    category: portfolio.category || "design",
+    tags: portfolio.tags?.join(", ") || "",
+  };
+}
+
+function parseEditTags(value: string) {
+  return value
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+}
 
 const categoryLabels: Record<string, string> = {
   design: "Thiết kế",
@@ -70,12 +99,26 @@ function getInitials(name: string) {
   return name.trim().slice(0, 1).toUpperCase() || "A";
 }
 
+function notifyPortfolioLikeChanged(portfolioId: string, likesCount: number) {
+  if (typeof window === "undefined") return;
+
+  window.dispatchEvent(
+    new CustomEvent("artfolio:portfolio-like-changed", {
+      detail: {
+        portfolioId,
+        likesCount,
+      },
+    }),
+  );
+}
+
 export default function PortfolioDetailClient({
   portfolioId,
   mode = "page",
   initialPortfolio = null,
   initialComments = [],
   initialErrorMessage = "",
+  onDeleted,
 }: PortfolioDetailClientProps) {
   const { user: currentUser, isAuthenticated, accessToken } = useAuthStore();
   const currentUserId = getUserId(currentUser);
@@ -101,6 +144,20 @@ export default function PortfolioDetailClient({
   const [commentText, setCommentText] = useState("");
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [notice, setNotice] = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeletingPortfolio, setIsDeletingPortfolio] = useState(false);
+  const [isEditingPortfolio, setIsEditingPortfolio] = useState(false);
+  const [editValues, setEditValues] = useState<EditFormState>({
+    title: "",
+    description: "",
+    category: "design",
+    tags: "",
+  });
+  const [initialEditValues, setInitialEditValues] =
+    useState<EditFormState | null>(null);
+  const [isUpdatingPortfolio, setIsUpdatingPortfolio] = useState(false);
+  const [editErrorMessage, setEditErrorMessage] = useState("");
+  const [showDiscardEditConfirm, setShowDiscardEditConfirm] = useState(false);
 
   const categoryLabel = useMemo(() => {
     if (!portfolio) return "";
@@ -115,6 +172,16 @@ export default function PortfolioDetailClient({
   }, [portfolio, currentUserId]);
 
   const isLiked = optimisticLiked ?? serverIsLiked;
+  const hasUnsavedEditChanges = useMemo(() => {
+  if (!initialEditValues) return false;
+
+  return (
+    editValues.title !== initialEditValues.title ||
+    editValues.description !== initialEditValues.description ||
+    editValues.category !== initialEditValues.category ||
+    editValues.tags !== initialEditValues.tags
+  );
+}, [editValues, initialEditValues]);
 
   useEffect(() => {
     const socket: Socket = io(getSocketUrl(), {
@@ -204,18 +271,18 @@ export default function PortfolioDetailClient({
     };
   }, [initialErrorMessage, initialPortfolio, portfolioId]);
 
+  const ownerId = portfolio?.user?._id;
+
   useEffect(() => {
-    if (!portfolioId) return;
+    if (!portfolioId || !ownerId) return;
 
-    const viewKey = `artfolio-view-lock-${portfolioId}`;
-    const lastViewedAt = Number(sessionStorage.getItem(viewKey) || 0);
-    const now = Date.now();
+    if (currentUserId && String(currentUserId) === String(ownerId)) {
+      return;
+    }
 
-    if (now - lastViewedAt < 5000) return;
+    const VIEW_DELAY_MS = 3000;
 
-    sessionStorage.setItem(viewKey, String(now));
-
-    async function increaseView() {
+    const timer = window.setTimeout(async () => {
       try {
         const response = await fetch(getApiUrl(`portfolios/${portfolioId}/view`), {
           method: "POST",
@@ -228,20 +295,184 @@ export default function PortfolioDetailClient({
           setPortfolio((current) =>
             current
               ? {
-                ...current,
-                views: Number(json.data.views),
-              }
+                  ...current,
+                  views: Number(json.data.views),
+                }
               : current,
           );
         }
       } catch (error) {
         console.error("Increase view error:", error);
       }
+    }, VIEW_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [portfolioId, ownerId, currentUserId]);
+
+  useEffect(() => {
+    function handleModalCloseRequest(event: Event) {
+      if (!isEditingPortfolio) return;
+
+      event.preventDefault();
+
+      if (hasUnsavedEditChanges) {
+        setShowDiscardEditConfirm(true);
+        return;
+      }
+
+      setIsEditingPortfolio(false);
     }
 
-    increaseView();
-  }, [portfolioId]);
+    window.addEventListener(
+      "artfolio:portfolio-modal-close-request",
+      handleModalCloseRequest,
+    );
 
+    return () => {
+      window.removeEventListener(
+        "artfolio:portfolio-modal-close-request",
+        handleModalCloseRequest,
+      );
+    };
+  }, [hasUnsavedEditChanges, isEditingPortfolio]);
+  function handleStartEditPortfolio() {
+    if (!portfolio) return;
+
+    const formState = getEditFormStateFromPortfolio(portfolio);
+
+    setEditValues(formState);
+    setInitialEditValues(formState);
+    setEditErrorMessage("");
+    setShowDiscardEditConfirm(false);
+    setIsEditingPortfolio(true);
+  }
+
+  function handleCancelEditPortfolio() {
+    if (hasUnsavedEditChanges) {
+      setShowDiscardEditConfirm(true);
+      return;
+    }
+
+    setIsEditingPortfolio(false);
+  }
+
+  function handleDiscardEditChanges() {
+    setShowDiscardEditConfirm(false);
+    setIsEditingPortfolio(false);
+    setEditErrorMessage("");
+
+    if (portfolio) {
+      const formState = getEditFormStateFromPortfolio(portfolio);
+      setEditValues(formState);
+      setInitialEditValues(formState);
+    }
+  }
+
+  function updateEditField(field: keyof EditFormState, value: string) {
+    setEditValues((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  async function handleSubmitEditPortfolio(
+    event: React.FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+    setEditErrorMessage("");
+
+    if (!accessToken) {
+      toast.error("Phiên đăng nhập đã hết hạn.");
+      return;
+    }
+
+    const title = editValues.title.trim();
+    const description = editValues.description.trim();
+    const tags = parseEditTags(editValues.tags);
+
+    if (title.length < 5) {
+      setEditErrorMessage("Tiêu đề ít nhất 5 ký tự.");
+      return;
+    }
+
+    if (title.length > 100) {
+      setEditErrorMessage("Tiêu đề tối đa 100 ký tự.");
+      return;
+    }
+
+    if (description.length > 1000) {
+      setEditErrorMessage("Mô tả tối đa 1000 ký tự.");
+      return;
+    }
+
+    setIsUpdatingPortfolio(true);
+
+    try {
+      const response = await fetch(getApiUrl(`portfolios/${portfolioId}`), {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          title,
+          description,
+          category: editValues.category,
+          tags,
+        }),
+      });
+
+      const json = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(json?.message || "Không thể cập nhật tác phẩm.");
+      }
+
+      const updatedPortfolio = json?.data as PortfolioDetail | undefined;
+
+      setPortfolio((current) => {
+        if (updatedPortfolio) return updatedPortfolio;
+
+        if (!current) return current;
+
+        return {
+          ...current,
+          title,
+          description,
+          category: editValues.category,
+          tags,
+        };
+      });
+
+      if (updatedPortfolio?.likesCount !== undefined) {
+        setLikesCount(updatedPortfolio.likesCount || 0);
+      }
+
+      const nextFormState = updatedPortfolio
+        ? getEditFormStateFromPortfolio(updatedPortfolio)
+        : {
+            title,
+            description,
+            category: editValues.category,
+            tags: tags.join(", "),
+          };
+
+      setEditValues(nextFormState);
+      setInitialEditValues(nextFormState);
+      setIsEditingPortfolio(false);
+      setShowDiscardEditConfirm(false);
+
+      toast.success("Cập nhật tác phẩm thành công.");
+    } catch (error) {
+      setEditErrorMessage(
+        error instanceof Error ? error.message : "Không thể cập nhật tác phẩm.",
+      );
+    } finally {
+      setIsUpdatingPortfolio(false);
+    }
+  }
   async function handleToggleLike() {
     setNotice("");
 
@@ -250,9 +481,17 @@ export default function PortfolioDetailClient({
       return;
     }
 
-    const nextLiked = !isLiked;
+    const previousLiked = isLiked;
+    const previousLikesCount = likesCount;
+    const nextLiked = !previousLiked;
+    const optimisticLikesCount = Math.max(
+      0,
+      previousLikesCount + (nextLiked ? 1 : -1),
+    );
+
     setOptimisticLiked(nextLiked);
-    setLikesCount((current) => Math.max(0, current + (nextLiked ? 1 : -1)));
+    setLikesCount(optimisticLikesCount);
+    notifyPortfolioLikeChanged(portfolioId, optimisticLikesCount);
 
     try {
       const response = await fetch(getApiUrl(`portfolios/${portfolioId}/like`), {
@@ -269,12 +508,19 @@ export default function PortfolioDetailClient({
       }
 
       if (json?.data) {
-        setOptimisticLiked(Boolean(json.data.isLiked));
-        setLikesCount(Number(json.data.likesCount || 0));
+        const serverIsLiked = Boolean(json.data.isLiked);
+        const serverLikesCount = Number(json.data.likesCount || 0);
+
+        setOptimisticLiked(serverIsLiked);
+        setLikesCount(serverLikesCount);
+        notifyPortfolioLikeChanged(portfolioId, serverLikesCount);
       }
+
     } catch (error) {
-      setOptimisticLiked(!nextLiked);
-      setLikesCount((current) => Math.max(0, current + (nextLiked ? -1 : 1)));
+      setOptimisticLiked(previousLiked);
+      setLikesCount(previousLikesCount);
+      notifyPortfolioLikeChanged(portfolioId, previousLikesCount);
+
       setNotice(
         error instanceof Error
           ? error.message
@@ -381,14 +627,11 @@ export default function PortfolioDetailClient({
     setNotice("");
 
     if (!accessToken) {
-      setNotice("Phiên đăng nhập đã hết hạn.");
+      toast.error("Phiên đăng nhập đã hết hạn.");
       return;
     }
 
-    const confirmed = window.confirm(
-      "Bạn có chắc chắn muốn xóa tác phẩm này? Hành động này không thể hoàn tác!"
-    );
-    if (!confirmed) return;
+    setIsDeletingPortfolio(true);
 
     try {
       const response = await fetch(getApiUrl(`portfolios/${portfolioId}`), {
@@ -404,13 +647,22 @@ export default function PortfolioDetailClient({
         throw new Error(json?.message || "Không thể xóa tác phẩm.");
       }
 
-      alert("Đã xóa tác phẩm thành công!");
-      router.push("/dashboard");
+      toast.success("Đã xóa tác phẩm.");
+      setShowDeleteConfirm(false);
+
+      if (mode === "modal" && onDeleted) {
+        onDeleted(portfolioId);
+        return;
+      }
+
+      router.push("/dashboard?tab=portfolios");
       router.refresh();
     } catch (error) {
-      setNotice(
-        error instanceof Error ? error.message : "Không thể xóa tác phẩm."
+      toast.error(
+        error instanceof Error ? error.message : "Không thể xóa tác phẩm.",
       );
+    } finally {
+      setIsDeletingPortfolio(false);
     }
   }
 
@@ -447,7 +699,190 @@ export default function PortfolioDetailClient({
       </main>
     );
   }
+  if (isEditingPortfolio && portfolio) {
+    return (
+      <main className={isModal ? "bg-background" : "min-h-screen bg-background"}>
+        <div className="border-b border-border bg-surface/90 backdrop-blur">
+          <div
+            className={
+              isModal
+                ? "flex min-h-16 items-center justify-between gap-4 px-5 py-3 sm:px-8 lg:px-10"
+                : "app-container flex min-h-16 items-center justify-between gap-4 py-3"
+            }
+          >
+            <div>
+              <p className="text-xs font-bold uppercase text-primary">
+                Chỉnh sửa tác phẩm
+              </p>
+              <h1 className="text-xl font-extrabold text-foreground">
+                {portfolio.title}
+              </h1>
+            </div>
 
+          </div>
+        </div>
+
+        <div className={isModal ? "px-5 py-8 sm:px-8 lg:px-10" : "app-container py-8 lg:py-12"}>
+          <form
+            onSubmit={handleSubmitEditPortfolio}
+            className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]"
+          >
+            <div className="grid gap-6">
+              {editErrorMessage && (
+                <div className="rounded-xl border border-danger/30 bg-danger/10 p-4 text-sm font-semibold text-danger">
+                  {editErrorMessage}
+                </div>
+              )}
+
+              <label className="field">
+                <span className="label">Tiêu đề *</span>
+                <input
+                  className="input"
+                  value={editValues.title}
+                  onChange={(event) => updateEditField("title", event.target.value)}
+                  placeholder="Nhập tiêu đề tác phẩm..."
+                />
+              </label>
+
+              <label className="field">
+                <span className="label">Danh mục *</span>
+                <select
+                  className="input"
+                  value={editValues.category}
+                  onChange={(event) =>
+                    updateEditField(
+                      "category",
+                      event.target.value as PortfolioDetail["category"],
+                    )
+                  }
+                >
+                  <option value="design">Design</option>
+                  <option value="art">Art</option>
+                  <option value="photo">Photography</option>
+                  <option value="3d">3D Rendering</option>
+                  <option value="other">Khác</option>
+                </select>
+              </label>
+
+              <label className="field">
+                <span className="label">Thẻ (Tags)</span>
+                <input
+                  className="input"
+                  value={editValues.tags}
+                  onChange={(event) => updateEditField("tags", event.target.value)}
+                  placeholder="Phân cách bằng dấu phẩy (vd: ui, ux, dashboard)"
+                />
+              </label>
+
+              <label className="field">
+                <span className="label">Mô tả</span>
+                <textarea
+                  rows={6}
+                  className="input h-auto py-3 leading-relaxed"
+                  value={editValues.description}
+                  onChange={(event) =>
+                    updateEditField("description", event.target.value)
+                  }
+                  placeholder="Giới thiệu về quá trình và cảm hứng của bạn..."
+                />
+              </label>
+
+              <div className="flex justify-center border-t border-border pt-6">
+                <button
+                  type="submit"
+                  disabled={isUpdatingPortfolio}
+                  className="btn btn-primary h-12 min-w-56 justify-center text-base"
+                >
+                  {isUpdatingPortfolio ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Đang lưu...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4" />
+                      Lưu thay đổi
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <aside className="grid h-fit gap-5">
+              <section className="surface rounded-lg p-5">
+                <p className="mb-2 text-sm font-bold uppercase text-muted">
+                  Ảnh hiện tại của tác phẩm
+                </p>
+                <p className="mb-4 text-xs leading-5 text-muted">
+                  Bạn có thể chỉnh sửa tiêu đề, danh mục, thẻ và mô tả. Chức năng
+                  thay đổi ảnh sẽ được bổ sung sau.
+                </p>
+
+                {portfolio.images?.length > 0 ? (
+                  <div className="grid gap-3">
+                    {portfolio.images.map((image, index) => (
+                      <div
+                        key={`${image}-${index}`}
+                        className="relative overflow-hidden rounded-xl border border-border bg-surface-soft"
+                      >
+                        <Image
+                          src={image}
+                          alt={`${portfolio.title} - ảnh ${index + 1}`}
+                          width={640}
+                          height={420}
+                          className="h-auto w-full object-cover"
+                        />
+                        <span className="absolute bottom-2 left-2 rounded-md bg-black/60 px-2 py-0.5 text-[10px] font-bold text-white">
+                          Ảnh {index + 1}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-border bg-surface-soft p-8 text-center text-sm text-muted">
+                    Không tìm thấy hình ảnh nào của tác phẩm.
+                  </div>
+                )}
+              </section>
+            </aside>
+          </form>
+        </div>
+
+        {showDiscardEditConfirm && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 px-4">
+            <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-2xl">
+              <h2 className="text-xl font-bold text-foreground">
+                Bỏ chỉnh sửa?
+              </h2>
+
+              <p className="mt-3 text-sm leading-6 text-muted">
+                Bạn có thay đổi chưa được lưu. Nếu thoát bây giờ, nội dung chỉnh
+                sửa sẽ bị mất.
+              </p>
+
+              <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={handleDiscardEditChanges}
+                  className="btn btn-secondary"
+                >
+                  Thoát và bỏ thay đổi
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowDiscardEditConfirm(false)}
+                  className="btn btn-primary"
+                >
+                  Tiếp tục chỉnh sửa
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+    );
+  }
   return (
     <main className={isModal ? "bg-background" : "min-h-screen bg-background"}>
       <div
@@ -611,15 +1046,16 @@ export default function PortfolioDetailClient({
 
               {isOwner && (
                 <div className="mt-6 flex flex-col gap-3 border-t border-border pt-6">
-                  <Link
-                    href={`/portfolio/edit/${portfolioId}`}
+                  <button
+                    type="button"
+                    onClick={handleStartEditPortfolio}
                     className="btn btn-outline w-full h-11 flex items-center justify-center gap-2 text-sm font-bold transition-all hover:bg-primary/10 hover:text-primary"
                   >
                     <Edit3 className="h-4 w-4" /> Chỉnh sửa tác phẩm
-                  </Link>
+                  </button>
                   <button
                     type="button"
-                    onClick={handleDeletePortfolio}
+                    onClick={() => setShowDeleteConfirm(true)}
                     className="btn btn-outline border-danger text-danger hover:bg-danger/10 hover:text-danger w-full h-11 flex items-center justify-center gap-2 text-sm font-bold transition-all"
                   >
                     <Trash2 className="h-4 w-4" /> Xóa tác phẩm
@@ -741,7 +1177,42 @@ export default function PortfolioDetailClient({
             </section>
           </aside>
         </div>
-      </div>
+            </div>
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-2xl">
+            <h2 className="text-xl font-bold text-foreground">
+              Xóa tác phẩm?
+            </h2>
+
+            <p className="mt-3 text-sm leading-6 text-muted">
+              Bạn có chắc chắn muốn xóa tác phẩm này không? Hành động này không
+              thể hoàn tác.
+            </p>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={isDeletingPortfolio}
+                className="btn btn-secondary"
+              >
+                Hủy
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDeletePortfolio}
+                disabled={isDeletingPortfolio}
+                className="btn bg-danger text-white hover:bg-danger/90"
+              >
+                {isDeletingPortfolio ? "Đang xóa..." : "Xóa tác phẩm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

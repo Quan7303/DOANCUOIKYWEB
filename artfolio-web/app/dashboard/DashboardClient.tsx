@@ -2,14 +2,16 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import Image from "next/image";
-import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import ExportPdfButton from "../components/ExportPdfButton";
 import ProfileHeader from "./components/ProfileHeader";
 import DashboardStats from "./components/DashboardStats";
-import PortfolioCard from "../components/PortfolioCard";
+import PortfolioModalShell from "../components/PortfolioModalShell";
+import PortfolioDetailClient from "../portfolio/[id]/PortfolioDetailClient";
+import { useAuthStore } from "../store/useAuthStore";
+
 import type {
   AuthUser,
   PortfolioDetail,
@@ -49,6 +51,15 @@ function getPortfolioId(portfolio: PortfolioDetail) {
   };
 
   return item._id || item.id || item.slug || portfolio.title;
+}
+
+function getPortfolioImage(portfolio: PortfolioDetail) {
+  const item = portfolio as PortfolioDetail & {
+    image?: string;
+    images?: string[];
+  };
+
+  return item.image || item.images?.[0] || "/next.svg";
 }
 
 function mergePortfolios(items: PortfolioDetail[]) {
@@ -110,16 +121,58 @@ export default function DashboardClient({
   const router = useRouter();
   const searchParams = useSearchParams();
   const currentTab = searchParams.get("tab");
+  const previewPortfolioId = searchParams.get("preview");
   const activeTab = getValidDashboardTab(currentTab);
+  const fetchMe = useAuthStore((state) => state.fetchMe);
 
-  const portfolios = useMemo(
-    () => mergePortfolios(myPortfolios),
-    [myPortfolios],
+  const [portfolios, setPortfolios] = useState<PortfolioDetail[]>(() =>
+    mergePortfolios(myPortfolios),
   );
 
-  function handleChangeTab(tab: DashboardTab) {
-    router.replace(`/dashboard?tab=${tab}`, { scroll: false });
+  useEffect(() => {
+    setPortfolios(mergePortfolios(myPortfolios));
+  }, [myPortfolios]);
+  useEffect(() => {
+    if (activeTab === "portfolios" && previewPortfolioId) {
+      setSelectedPortfolioId(previewPortfolioId);
+    }
+  }, [activeTab, previewPortfolioId]);
+  useEffect(() => {
+  function handlePortfolioLikeChanged(event: Event) {
+    const customEvent = event as CustomEvent<{
+      portfolioId?: string;
+      likesCount?: number;
+    }>;
+
+    const portfolioId = customEvent.detail?.portfolioId;
+    const likesCount = customEvent.detail?.likesCount;
+
+    if (!portfolioId || typeof likesCount !== "number") return;
+
+    setPortfolios((current) =>
+      current.map((portfolio) =>
+        getPortfolioId(portfolio) === portfolioId
+          ? {
+              ...portfolio,
+              likesCount,
+            }
+          : portfolio,
+      ),
+    );
   }
+
+  window.addEventListener(
+    "artfolio:portfolio-like-changed",
+    handlePortfolioLikeChanged,
+  );
+
+  return () => {
+    window.removeEventListener(
+      "artfolio:portfolio-like-changed",
+      handlePortfolioLikeChanged,
+    );
+  };
+}, []);
 
   const [submitResult, setSubmitResult] = useState<{
     ok: boolean;
@@ -127,6 +180,44 @@ export default function DashboardClient({
   } | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedPortfolioId, setSelectedPortfolioId] = useState<string | null>(
+    null,
+  );
+
+  function handleChangeTab(tab: DashboardTab) {
+    router.replace(`/dashboard?tab=${tab}`, { scroll: false });
+  }
+
+  function goToCreatePortfolio() {
+    router.push("/create");
+  }
+
+  function handleOpenPortfolio(portfolioId: string) {
+    setSelectedPortfolioId(portfolioId);
+  }
+
+  function handleClosePortfolio() {
+    setSelectedPortfolioId(null);
+
+    if (previewPortfolioId) {
+      router.replace("/dashboard?tab=portfolios", { scroll: false });
+    }
+  }
+  function handleDeletedPortfolio(deletedPortfolioId: string) {
+    setSelectedPortfolioId(null);
+
+    setPortfolios((current) =>
+      current.filter(
+        (portfolio) => getPortfolioId(portfolio) !== deletedPortfolioId,
+      ),
+    );
+
+    if (previewPortfolioId) {
+      router.replace("/dashboard?tab=portfolios", { scroll: false });
+    }
+
+    router.refresh();
+  }
 
   const totalLikes = useMemo(() => {
     return portfolios.reduce((sum, item) => sum + item.likesCount, 0);
@@ -145,6 +236,7 @@ export default function DashboardClient({
     defaultValues: {
       userId: user._id || user.id,
       name: user.name,
+      portfolioDescription: user.portfolioDescription || "",
       skills: user.skills?.join(", ") || "",
       experience: user.experience?.join("\n") || "",
       socialLinks: formatSocialLinks(user),
@@ -158,10 +250,13 @@ export default function DashboardClient({
     try {
       await api.put(`/api/users/${values.userId}`, {
         name: values.name,
+        portfolioDescription: values.portfolioDescription,
         skills: parseCsv(values.skills),
         experience: parseLines(values.experience),
         socialLinks: parseSocialLinks(values.socialLinks),
       });
+
+      await fetchMe();
 
       setSubmitResult({
         ok: true,
@@ -184,14 +279,22 @@ export default function DashboardClient({
   const pdfProfile: PortfolioPdfProfile = {
     name: user.name,
     email: user.email,
-    title: user.role === "admin" ? "Admin · Artfolio" : "Creative Portfolio",
+    title:
+      user.portfolioTitle ||
+      (user.role === "admin" ? "Admin · Artfolio" : "Creative Portfolio"),
     skills: user.skills || [],
     experience: user.experience || [],
     socialLinks: parseCsv(formatSocialLinks(user)),
+    totalLikes,
+    totalViews,
     works: portfolios.map((p) => ({
       title: p.title,
-      category: p.category,
+      category: categoryLabels[p.category] ?? p.category,
       description: p.description,
+      image: getPortfolioImage(p),
+      likesCount: p.likesCount || 0,
+      views: p.views || 0,
+      tags: p.tags || [],
     })),
   };
 
@@ -352,7 +455,22 @@ export default function DashboardClient({
                       Email không thể thay đổi.
                     </span>
                   </label>
-
+                  <label className="field">
+                    <span className="label">Giới thiệu bản thân</span>
+                    <textarea
+                      rows={4}
+                      className={`input h-auto py-2.5 leading-relaxed${
+                        errors.portfolioDescription ? " input-error" : ""
+                      }`}
+                      placeholder="Mô tả ngắn về bản thân, phong cách sáng tạo hoặc định hướng portfolio..."
+                      {...register("portfolioDescription")}
+                    />
+                    {errors.portfolioDescription && (
+                      <span className="error-text">
+                        {errors.portfolioDescription.message}
+                      </span>
+                    )}
+                  </label>
                   <label className="field">
                     <span className="label">Kỹ năng</span>
                     <input
@@ -424,12 +542,13 @@ export default function DashboardClient({
                     </p>
                   </div>
 
-                  <Link
-                    href="/portfolio/create"
+                  <button
+                    type="button"
+                    onClick={goToCreatePortfolio}
                     className="btn btn-primary text-sm"
                   >
                     Thêm tác phẩm
-                  </Link>
+                  </button>
                 </div>
 
                 {portfolios.length === 0 ? (
@@ -439,22 +558,43 @@ export default function DashboardClient({
                       Hãy đăng tác phẩm đầu tiên để xây dựng portfolio cá nhân.
                     </p>
 
-                    <Link
-                      href="/portfolio/create"
-                      className="btn btn-primary mt-5"
-                    >
-                      Upload your first shot
-                    </Link>
                   </div>
                 ) : (
                   <div className="grid gap-4 sm:grid-cols-2">
-                    {portfolios.map((portfolio) => (
-                      <PortfolioCard
-                        key={getPortfolioId(portfolio)}
-                        portfolio={portfolio}
-                        compact
-                      />
-                    ))}
+                    {portfolios.map((portfolio) => {
+                      const portfolioId = getPortfolioId(portfolio);
+                      const image = getPortfolioImage(portfolio);
+
+                      return (
+                        <button
+                          key={portfolioId}
+                          type="button"
+                          onClick={() => handleOpenPortfolio(portfolioId)}
+                          className="surface flex gap-4 rounded-xl p-3 text-left transition hover:-translate-y-0.5 hover:shadow-lg"
+                        >
+                          <img
+                            src={image}
+                            alt={portfolio.title}
+                            className="h-20 w-28 rounded-lg object-cover"
+                          />
+
+                          <div className="min-w-0 flex-1">
+                            <h3 className="truncate font-bold">{portfolio.title}</h3>
+
+                            {portfolio.category && (
+                              <span className="badge mt-2 inline-flex">
+                                {portfolio.category}
+                              </span>
+                            )}
+
+                            <div className="mt-3 flex gap-3 text-sm text-muted">
+                              <span>♥ {portfolio.likesCount || 0}</span>
+                              <span>👁 {portfolio.views || 0}</span>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -513,6 +653,16 @@ export default function DashboardClient({
           </div>
         </div>
       </div>
+      {selectedPortfolioId && (
+        <PortfolioModalShell onClose={handleClosePortfolio}>
+          <PortfolioDetailClient
+            key={selectedPortfolioId}
+            portfolioId={selectedPortfolioId}
+            mode="modal"
+            onDeleted={handleDeletedPortfolio}
+          />
+        </PortfolioModalShell>
+      )}
     </section>
   );
 }

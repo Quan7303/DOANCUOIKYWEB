@@ -1,7 +1,8 @@
 import PortfolioGrid from "./components/PortfolioGrid";
 import { getFeaturedPortfolios } from "./data/portfolios";
+import HomeHeroActions from "./components/HomeHeroActions";
 
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const portfolios = await getFeaturedPortfolios();
@@ -23,17 +24,7 @@ export default async function Home() {
             <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-muted sm:text-xl">
               Nơi hội tụ những tác phẩm thiết kế, nhiếp ảnh và nghệ thuật đỉnh cao. Chia sẻ portfolio của bạn với cộng đồng sáng tạo trên toàn thế giới.
             </p>
-            <div className="mt-10 flex items-center justify-center gap-x-6">
-              <a
-                href="/signup"
-                className="rounded-full bg-primary px-8 py-3.5 text-sm font-semibold text-white shadow-sm hover:bg-primary-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary transition-all hover:scale-105"
-              >
-                Tham gia ngay
-              </a>
-              <a href="#explore" className="text-sm font-semibold leading-6 text-foreground hover:text-primary transition-colors">
-                Khám phá tác phẩm <span aria-hidden="true">→</span>
-              </a>
-            </div>
+            <HomeHeroActions />
           </div>
         </div>
       </section>

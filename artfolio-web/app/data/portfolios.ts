@@ -96,5 +96,5 @@ export async function getPortfolios(
 }
 
 export async function getFeaturedPortfolios(): Promise<PortfolioSummary[]> {
-  return getPortfolios(8, { revalidate: 60 });
+  return getPortfolios(8);
 }

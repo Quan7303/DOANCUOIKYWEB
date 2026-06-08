@@ -16,7 +16,7 @@ export default function ExportPdfButton({ profile }: ExportPdfButtonProps) {
 
   const handleExport = async () => {
     if (!canExport) {
-      setError("Ho so thieu ten hoac email, chua the xuat PDF.");
+      setError("Hồ sơ thiếu tên hoặc email, chưa thể xuất PDF.");
       return;
     }
 
@@ -26,7 +26,7 @@ export default function ExportPdfButton({ profile }: ExportPdfButtonProps) {
     try {
       await exportPortfolioPdf(profile);
     } catch {
-      setError("Khong the xuat PDF. Vui long thu lai.");
+      setError("Không thể xuất PDF. Vui lòng thử lại.");
     } finally {
       setIsExporting(false);
     }
@@ -43,12 +43,12 @@ export default function ExportPdfButton({ profile }: ExportPdfButtonProps) {
         {isExporting ? (
           <>
             <Loader2 className="h-4 w-4 animate-spin" />
-            Dang xuat PDF...
+            Đang xuất PDF...
           </>
         ) : (
           <>
             <Download className="h-4 w-4" />
-            Xuat PDF
+            Xuất PDF
           </>
         )}
       </button>

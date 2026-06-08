@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Eye, Heart } from "lucide-react";
@@ -156,41 +155,79 @@ export default function PortfolioGrid({
   isLoading = false,
   errorMessage,
 }: PortfolioGridProps) {
-  const router = useRouter();
+  const [displayPortfolios, setDisplayPortfolios] = useState(portfolios);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<PortfolioCategory | "all">("all");
   const [tag, setTag] = useState("all");
+
+  useEffect(() => {
+    setDisplayPortfolios(portfolios);
+  }, [portfolios]);
+
+  useEffect(() => {
+    function handlePortfolioLikeChanged(event: Event) {
+      const customEvent = event as CustomEvent<{
+        portfolioId?: string;
+        likesCount?: number;
+      }>;
+
+      const portfolioId = customEvent.detail?.portfolioId;
+      const likesCount = customEvent.detail?.likesCount;
+
+      if (!portfolioId || typeof likesCount !== "number") return;
+
+      setDisplayPortfolios((current) =>
+        current.map((portfolio) =>
+          getPortfolioId(portfolio) === portfolioId
+            ? {
+                ...portfolio,
+                likesCount,
+              }
+            : portfolio,
+        ),
+      );
+    }
+
+    window.addEventListener(
+      "artfolio:portfolio-like-changed",
+      handlePortfolioLikeChanged,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "artfolio:portfolio-like-changed",
+        handlePortfolioLikeChanged,
+      );
+    };
+  }, []);
   const [selectedColor, setSelectedColor] = useState<string | "all">("all");
   const [selectedPortfolioId, setSelectedPortfolioId] = useState<string | null>(null);
 
-  useEffect(() => {
-    const handlePopState = () => setSelectedPortfolioId(null);
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
-
   const handleOpenPortfolio = (portfolioId: string) => {
-    const detailHref = `/portfolio/${portfolioId}`;
     setSelectedPortfolioId(portfolioId);
-    router.push(detailHref, { scroll: false });
   };
 
   const handleClosePortfolio = () => {
     setSelectedPortfolioId(null);
-    router.back();
   };
 
-  const tags = useMemo(() => Array.from(new Set(portfolios.flatMap((portfolio) => portfolio.tags || []))).sort(), [portfolios]);
+  const tags = useMemo(
+    () =>
+      Array.from(
+        new Set(displayPortfolios.flatMap((portfolio) => portfolio.tags || [])),
+      ).sort(),
+    [displayPortfolios],
+  );
   
   const colors = useMemo(() => {
-    const allColors = portfolios.flatMap((p) => p.colors || []);
-    return Array.from(new Set(allColors.map(c => c.toLowerCase()))).sort();
-  }, [portfolios]);
+    const allColors = displayPortfolios.flatMap((p) => p.colors || []);
+    return Array.from(new Set(allColors.map((c) => c.toLowerCase()))).sort();
+  }, [displayPortfolios]);
 
   const filtered = useMemo(() => {
     const q = normalize(query);
 
-    return portfolios.filter((portfolio) => {
+    return displayPortfolios.filter((portfolio) => {
       const matchesQuery =
         !q ||
         normalize(portfolio.title).includes(q) ||
@@ -203,7 +240,7 @@ export default function PortfolioGrid({
 
       return matchesQuery && matchesCategory && matchesTag && matchesColor;
     });
-  }, [category, portfolios, query, tag, selectedColor]);
+  }, [category, displayPortfolios, query, tag, selectedColor]);
 
   const categoryOptions = Object.entries(categoryLabels).map(([value, label]) => ({ value, label }));
   const tagOptions = [{ value: "all", label: "Tất cả Tags" }, ...tags.map(t => ({ value: t, label: `#${t}` }))];
