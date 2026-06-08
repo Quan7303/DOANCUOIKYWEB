@@ -16,9 +16,15 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: [true, 'Mật khẩu là bắt buộc'],
+      // Không required vì user đăng nhập bằng Google không có password
       minlength: [6, 'Mật khẩu phải có ít nhất 6 ký tự'],
       select: false // Bảo mật: Không tự động trả về trong câu lệnh SELECT
+    },
+    // Google OAuth
+    googleId: {
+      type: String,
+      default: null,
+      index: true
     },
     avatar: {
       type: String,
