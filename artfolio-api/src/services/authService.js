@@ -1,8 +1,11 @@
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
+import { OAuth2Client } from 'google-auth-library'
 import User from '~/models/userModel.js'
 import { env } from '~/config/environment.js'
 import { ApiError } from '~/utils/ApiError.js'
+
+const googleClient = new OAuth2Client(env.GOOGLE_CLIENT_ID)
 
 const generateAccessToken = (user) => {
   return jwt.sign(
@@ -53,6 +56,11 @@ const login = async (reqBody) => {
     throw new ApiError(401, 'Email hoặc mật khẩu không chính xác!')
   }
 
+  // Tài khoản đăng ký bằng Google không có password
+  if (!user.password) {
+    throw new ApiError(400, 'Tài khoản này được đăng ký bằng Google. Vui lòng đăng nhập bằng Google.')
+  }
+
   if (user.active !== 'active') {
     throw new ApiError(403, 'Tài khoản của bạn đã bị khóa hoặc ngừng hoạt động!')
   }
@@ -62,6 +70,71 @@ const login = async (reqBody) => {
     throw new ApiError(401, 'Email hoặc mật khẩu không chính xác!')
   }
 
+  const accessToken = generateAccessToken(user)
+  const refreshToken = generateRefreshToken(user)
+
+  const userResponse = user.toObject()
+  delete userResponse.password
+
+  return {
+    user: userResponse,
+    accessToken,
+    refreshToken
+  }
+}
+
+/**
+ * Đăng nhập / đăng ký bằng Google
+ * Frontend gửi lên idToken (Google credential) sau khi người dùng chọn tài khoản Google.
+ * Backend verify token với Google, lấy thông tin user, rồi tìm hoặc tạo tài khoản.
+ */
+const loginWithGoogle = async (idToken) => {
+  if (!idToken) {
+    throw new ApiError(400, 'Google ID Token là bắt buộc!')
+  }
+
+  // 1. Verify token với Google
+  let payload
+  try {
+    const ticket = await googleClient.verifyIdToken({
+      idToken,
+      audience: env.GOOGLE_CLIENT_ID
+    })
+    payload = ticket.getPayload()
+  } catch (error) {
+    throw new ApiError(401, 'Google Token không hợp lệ hoặc đã hết hạn!')
+  }
+
+  const { sub: googleId, email, name, picture } = payload
+
+  // 2. Tìm user theo googleId hoặc email
+  let user = await User.findOne({ $or: [{ googleId }, { email }] })
+
+  if (user) {
+    // Tài khoản tồn tại: kiểm tra trạng thái
+    if (user.active !== 'active') {
+      throw new ApiError(403, 'Tài khoản của bạn đã bị khóa hoặc ngừng hoạt động!')
+    }
+
+    // Nếu user đăng ký bằng email trước đó nhưng chưa có googleId → liên kết lại
+    if (!user.googleId) {
+      user.googleId = googleId
+      await user.save()
+    }
+  } else {
+    // 3. Tạo tài khoản mới từ thông tin Google
+    user = await User.create({
+      googleId,
+      email,
+      name,
+      avatar: picture || 'default-avatar.png',
+      role: 'user',
+      active: 'active'
+      // password không có — đây là tài khoản Google thuần
+    })
+  }
+
+  // 4. Tạo JWT như login thường
   const accessToken = generateAccessToken(user)
   const refreshToken = generateRefreshToken(user)
 
@@ -105,5 +178,6 @@ const refreshToken = async (incomingRefreshToken) => {
 export const authService = {
   signup,
   login,
+  loginWithGoogle,
   refreshToken
 }

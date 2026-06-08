@@ -33,6 +33,10 @@ router.post(
   authController.login
 )
 
+// Google OAuth Login
+// Body: { idToken: string }
+router.post('/google-login', authController.googleLogin)
+
 router.post('/logout', authController.logout)
 
 router.post('/refresh-token', authController.refreshToken)
