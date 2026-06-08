@@ -125,18 +125,34 @@ export default function DashboardClient({
   const activeTab = getValidDashboardTab(currentTab);
   const fetchMe = useAuthStore((state) => state.fetchMe);
 
-  const [portfolios, setPortfolios] = useState<PortfolioDetail[]>(() =>
-    mergePortfolios(myPortfolios),
-  );
+  const [deletedPortfolioIds, setDeletedPortfolioIds] = useState<string[]>([]);
+  const [likeOverrides, setLikeOverrides] = useState<Record<string, number>>({});
+  const [manualSelectedPortfolioId, setManualSelectedPortfolioId] = useState<
+    string | null
+  >(null);
 
-  useEffect(() => {
-    setPortfolios(mergePortfolios(myPortfolios));
-  }, [myPortfolios]);
-  useEffect(() => {
-    if (activeTab === "portfolios" && previewPortfolioId) {
-      setSelectedPortfolioId(previewPortfolioId);
-    }
-  }, [activeTab, previewPortfolioId]);
+  const selectedPortfolioId =
+    manualSelectedPortfolioId ||
+    (activeTab === "portfolios" ? previewPortfolioId : null);
+
+  const portfolios = useMemo(() => {
+    return mergePortfolios(myPortfolios)
+      .filter((portfolio) => !deletedPortfolioIds.includes(getPortfolioId(portfolio)))
+      .map((portfolio) => {
+        const portfolioId = getPortfolioId(portfolio);
+        const likesCount = likeOverrides[portfolioId];
+
+        if (typeof likesCount !== "number") {
+          return portfolio;
+        }
+
+        return {
+          ...portfolio,
+          likesCount,
+        };
+      });
+  }, [myPortfolios, deletedPortfolioIds, likeOverrides]);
+
   useEffect(() => {
   function handlePortfolioLikeChanged(event: Event) {
     const customEvent = event as CustomEvent<{
@@ -149,16 +165,10 @@ export default function DashboardClient({
 
     if (!portfolioId || typeof likesCount !== "number") return;
 
-    setPortfolios((current) =>
-      current.map((portfolio) =>
-        getPortfolioId(portfolio) === portfolioId
-          ? {
-              ...portfolio,
-              likesCount,
-            }
-          : portfolio,
-      ),
-    );
+    setLikeOverrides((current) => ({
+      ...current,
+      [portfolioId]: likesCount,
+    }));
   }
 
   window.addEventListener(
@@ -180,9 +190,6 @@ export default function DashboardClient({
   } | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [selectedPortfolioId, setSelectedPortfolioId] = useState<string | null>(
-    null,
-  );
 
   function handleChangeTab(tab: DashboardTab) {
     router.replace(`/dashboard?tab=${tab}`, { scroll: false });
@@ -193,23 +200,23 @@ export default function DashboardClient({
   }
 
   function handleOpenPortfolio(portfolioId: string) {
-    setSelectedPortfolioId(portfolioId);
+    setManualSelectedPortfolioId(portfolioId);
   }
 
   function handleClosePortfolio() {
-    setSelectedPortfolioId(null);
+    setManualSelectedPortfolioId(null);
 
     if (previewPortfolioId) {
       router.replace("/dashboard?tab=portfolios", { scroll: false });
     }
   }
   function handleDeletedPortfolio(deletedPortfolioId: string) {
-    setSelectedPortfolioId(null);
+    setManualSelectedPortfolioId(null);
 
-    setPortfolios((current) =>
-      current.filter(
-        (portfolio) => getPortfolioId(portfolio) !== deletedPortfolioId,
-      ),
+    setDeletedPortfolioIds((current) =>
+      current.includes(deletedPortfolioId)
+        ? current
+        : [...current, deletedPortfolioId],
     );
 
     if (previewPortfolioId) {

@@ -155,14 +155,26 @@ export default function PortfolioGrid({
   isLoading = false,
   errorMessage,
 }: PortfolioGridProps) {
-  const [displayPortfolios, setDisplayPortfolios] = useState(portfolios);
+  const [likeOverrides, setLikeOverrides] = useState<Record<string, number>>({});
+
+  const displayPortfolios = useMemo(() => {
+    return portfolios.map((portfolio) => {
+      const portfolioId = getPortfolioId(portfolio);
+      const likesCount = likeOverrides[portfolioId];
+
+      if (typeof likesCount !== "number") {
+        return portfolio;
+      }
+
+      return {
+        ...portfolio,
+        likesCount,
+      };
+    });
+  }, [portfolios, likeOverrides]);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<PortfolioCategory | "all">("all");
   const [tag, setTag] = useState("all");
-
-  useEffect(() => {
-    setDisplayPortfolios(portfolios);
-  }, [portfolios]);
 
   useEffect(() => {
     function handlePortfolioLikeChanged(event: Event) {
@@ -176,16 +188,10 @@ export default function PortfolioGrid({
 
       if (!portfolioId || typeof likesCount !== "number") return;
 
-      setDisplayPortfolios((current) =>
-        current.map((portfolio) =>
-          getPortfolioId(portfolio) === portfolioId
-            ? {
-                ...portfolio,
-                likesCount,
-              }
-            : portfolio,
-        ),
-      );
+      setLikeOverrides((current) => ({
+        ...current,
+        [portfolioId]: likesCount,
+      }));
     }
 
     window.addEventListener(
