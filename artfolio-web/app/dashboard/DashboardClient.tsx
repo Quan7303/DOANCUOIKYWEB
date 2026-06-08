@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import Image from "next/image";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -423,12 +424,12 @@ export default function DashboardClient({
                     </p>
                   </div>
 
-                  <a
+                  <Link
                     href="/portfolio/create"
                     className="btn btn-primary text-sm"
                   >
                     Thêm tác phẩm
-                  </a>
+                  </Link>
                 </div>
 
                 {portfolios.length === 0 ? (
@@ -438,12 +439,12 @@ export default function DashboardClient({
                       Hãy đăng tác phẩm đầu tiên để xây dựng portfolio cá nhân.
                     </p>
 
-                    <a
+                    <Link
                       href="/portfolio/create"
                       className="btn btn-primary mt-5"
                     >
                       Upload your first shot
-                    </a>
+                    </Link>
                   </div>
                 ) : (
                   <div className="grid gap-4 sm:grid-cols-2">

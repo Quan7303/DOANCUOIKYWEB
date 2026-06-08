@@ -16,6 +16,11 @@ const createSchema = z.object({
   tags: z.string().optional(),
 });
 
+const MAX_IMAGE_COUNT = 5;
+const MAX_IMAGE_SIZE_MB = 10;
+const MAX_IMAGE_SIZE_BYTES = MAX_IMAGE_SIZE_MB * 1024 * 1024;
+
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 type CreateFormValues = z.infer<typeof createSchema>;
 
 export default function CreatePortfolioPage() {
@@ -46,31 +51,50 @@ export default function CreatePortfolioPage() {
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
+    e.target.value = "";
+
     if (files.length === 0) return;
 
-    const validFiles: File[] = [];
-    const invalidFiles: string[] = [];
+    const invalidTypeFiles: string[] = [];
+    const oversizedFiles: string[] = [];
 
     files.forEach((file) => {
-      if (!file.type.startsWith("image/")) {
-        invalidFiles.push(file.name);
-      } else {
-        validFiles.push(file);
+      if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+        invalidTypeFiles.push(file.name);
+        return;
+      }
+
+      if (file.size > MAX_IMAGE_SIZE_BYTES) {
+        oversizedFiles.push(file.name);
       }
     });
 
-    if (invalidFiles.length > 0) {
-      setApiError(`File không hợp lệ: ${invalidFiles.join(", ")}. Chỉ hỗ trợ ảnh.`);
+    if (invalidTypeFiles.length > 0) {
+      setApiError(
+        `File không hợp lệ: ${invalidTypeFiles.join(
+          ", ",
+        )}. Chỉ hỗ trợ JPG, PNG hoặc WEBP.`,
+      );
       return;
     }
 
-    if (imageFiles.length + validFiles.length > 5) {
-      setApiError("Bạn chỉ được tải lên tối đa 5 ảnh.");
+    if (oversizedFiles.length > 0) {
+      setApiError(
+        `Ảnh vượt quá ${MAX_IMAGE_SIZE_MB}MB: ${oversizedFiles.join(", ")}.`,
+      );
       return;
     }
 
-    const newFiles = [...imageFiles, ...validFiles];
-    const newPreviews = [...imagePreviews, ...validFiles.map(file => URL.createObjectURL(file))];
+    if (imageFiles.length + files.length > MAX_IMAGE_COUNT) {
+      setApiError(`Bạn chỉ được tải lên tối đa ${MAX_IMAGE_COUNT} ảnh.`);
+      return;
+    }
+
+    const newFiles = [...imageFiles, ...files];
+    const newPreviews = [
+      ...imagePreviews,
+      ...files.map((file) => URL.createObjectURL(file)),
+    ];
 
     setImageFiles(newFiles);
     setImagePreviews(newPreviews);
@@ -128,6 +152,19 @@ export default function CreatePortfolioPage() {
 
     if (imageFiles.length === 0) {
       setApiError("Bạn phải chọn ít nhất 1 ảnh làm tác phẩm.");
+      return;
+    }
+
+    const oversizedFiles = imageFiles.filter(
+      (file) => file.size > MAX_IMAGE_SIZE_BYTES,
+    );
+
+    if (oversizedFiles.length > 0) {
+      setApiError(
+        `Ảnh vượt quá ${MAX_IMAGE_SIZE_MB}MB: ${oversizedFiles
+          .map((file) => file.name)
+          .join(", ")}.`,
+      );
       return;
     }
 
@@ -292,11 +329,13 @@ export default function CreatePortfolioPage() {
               <div className="relative flex min-h-[300px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-primary/50 bg-surface-soft p-6 text-center transition-colors hover:bg-primary/5">
                 <Upload className="mb-4 h-12 w-12 text-primary" />
                 <p className="text-sm font-semibold">Kéo thả ảnh hoặc click để chọn</p>
-                <p className="mt-1 text-xs text-muted">Hỗ trợ JPG, PNG, WEBP (Tối đa 5 ảnh)</p>
+                <p className="mt-1 text-xs text-muted">
+                  Hỗ trợ JPG, PNG, WEBP. Tối đa 5 ảnh, 10MB/ảnh.
+                </p>
                 <input
                   type="file"
                   multiple
-                  accept="image/*"
+                  accept="image/jpeg,image/png,image/webp"
                   onChange={handleImageChange}
                   className="absolute inset-0 cursor-pointer opacity-0"
                 />
@@ -325,7 +364,7 @@ export default function CreatePortfolioPage() {
                     <input
                       type="file"
                       multiple
-                      accept="image/*"
+                      accept="image/jpeg,image/png,image/webp"
                       onChange={handleImageChange}
                       className="absolute inset-0 opacity-0 cursor-pointer"
                     />
