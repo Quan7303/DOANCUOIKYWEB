@@ -13,6 +13,11 @@ type SignupPayload = {
   password: string;
 };
 
+type VerifySignupOtpPayload = {
+  email: string;
+  otp: string;
+};
+
 type AuthApiResponse = {
   accessToken?: string;
   token?: string;
@@ -35,6 +40,9 @@ type AuthState = {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (payload: SignupPayload) => Promise<void>;
+  verifySignupOtp: (payload: VerifySignupOtpPayload) => Promise<void>;
+  resendSignupOtp: (email: string) => Promise<string | undefined>;
+  googleLogin: (idToken: string) => Promise<void>;
   logout: () => Promise<void>;
   setHydrated: (value: boolean) => void;
   setAccessToken: (accessToken: string | null) => void;
@@ -187,6 +195,74 @@ export const useAuthStore = create<AuthState>()(
           });
         } catch (error) {
           throw new Error(getErrorMessage(error, "Dang ky that bai."));
+        } finally {
+          set({ isLoading: false });
+        }
+      },
+
+      verifySignupOtp: async (payload) => {
+        set({ isLoading: true });
+
+        try {
+          const data = await requestJson("/api/auth/verify-signup-otp", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+          const accessToken = extractAccessToken(data);
+          const user = extractUser(data);
+
+          if (!accessToken || !user) {
+            throw new Error("API xac thuc OTP chua tra ve du user va accessToken.");
+          }
+
+          set({ user, accessToken, isAuthenticated: true });
+        } catch (error) {
+          throw new Error(getErrorMessage(error, "Xac thuc OTP that bai."));
+        } finally {
+          set({ isLoading: false });
+        }
+      },
+
+      resendSignupOtp: async (email) => {
+        set({ isLoading: true });
+
+        try {
+          const data = await requestJson("/api/auth/resend-signup-otp", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email }),
+          });
+
+          return data?.message;
+        } catch (error) {
+          throw new Error(getErrorMessage(error, "Khong the gui lai OTP."));
+        } finally {
+          set({ isLoading: false });
+        }
+      },
+
+      googleLogin: async (idToken) => {
+        set({ isLoading: true });
+
+        try {
+          const data = await requestJson("/api/auth/google-login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ idToken }),
+          });
+
+          const accessToken = extractAccessToken(data);
+          const user = extractUser(data);
+
+          if (!accessToken || !user) {
+            throw new Error("API Google login chua tra ve du user va accessToken.");
+          }
+
+          set({ user, accessToken, isAuthenticated: true });
+        } catch (error) {
+          throw new Error(getErrorMessage(error, "Dang nhap Google that bai."));
         } finally {
           set({ isLoading: false });
         }

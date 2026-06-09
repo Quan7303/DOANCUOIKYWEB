@@ -231,9 +231,6 @@ export default function CreatePortfolioPage() {
         tagArray.forEach(t => formData.append("tags", t)); // Gửi mảng tags
       }
 
-      // Note: colors field is omitted because the backend automatically extracts colors 
-      // from the first image and Joi createValidation rejects "colors" as an unallowed field.
-
       // File ảnh
       imageFiles.forEach(file => {
         formData.append("images", file);
@@ -255,13 +252,13 @@ export default function CreatePortfolioPage() {
         toast.success("Đăng tác phẩm thành công.");
 
         router.push(
-            `/dashboard?tab=portfolios&preview=${encodeURIComponent(createdPortfolioId)}`,
+          `/dashboard?tab=portfolios&preview=${encodeURIComponent(createdPortfolioId)}`,
         );
 
         router.refresh();
-        } else {
+      } else {
         throw new Error(data.message || "Đã xảy ra lỗi khi tạo tác phẩm.");
-        }
+      }
     } catch (error: unknown) {
       console.error(error);
 
@@ -364,11 +361,10 @@ export default function CreatePortfolioPage() {
                   return (
                     <label
                       key={i}
-                      className={`flex items-center gap-3 rounded-lg border bg-surface p-2 transition ${
-                        activeColorIndex === i
-                          ? "border-primary ring-2 ring-primary/20"
-                          : "border-border"
-                      }`}
+                      className={`flex items-center gap-3 rounded-lg border bg-surface p-2 transition ${activeColorIndex === i
+                        ? "border-primary ring-2 ring-primary/20"
+                        : "border-border"
+                        }`}
                       onFocus={() => setActiveColorIndex(i)}
                     >
                       <span
@@ -376,9 +372,8 @@ export default function CreatePortfolioPage() {
                         style={{ backgroundColor: isValid ? c : "#ffffff" }}
                       />
                       <input
-                        className={`min-w-0 flex-1 bg-transparent text-sm font-semibold uppercase outline-none ${
-                          isValid ? "text-foreground" : "text-danger"
-                        }`}
+                        className={`min-w-0 flex-1 bg-transparent text-sm font-semibold uppercase outline-none ${isValid ? "text-foreground" : "text-danger"
+                          }`}
                         value={c}
                         maxLength={7}
                         onChange={(e) => handleColorChange(i, e.target.value)}
@@ -394,12 +389,11 @@ export default function CreatePortfolioPage() {
                     <button
                       key={preset}
                       type="button"
-                      className={`aspect-square rounded-sm border transition hover:scale-110 focus:outline-none focus:ring-2 focus:ring-primary/40 ${
-                        colors[activeColorIndex]?.toLowerCase() ===
+                      className={`aspect-square rounded-sm border transition hover:scale-110 focus:outline-none focus:ring-2 focus:ring-primary/40 ${colors[activeColorIndex]?.toLowerCase() ===
                         preset.toLowerCase()
-                          ? "border-foreground ring-2 ring-primary/40"
-                          : "border-border/50"
-                      }`}
+                        ? "border-foreground ring-2 ring-primary/40"
+                        : "border-border/50"
+                        }`}
                       style={{ backgroundColor: preset }}
                       onClick={() => applyPresetColor(preset)}
                       aria-label={`Use color ${preset}`}

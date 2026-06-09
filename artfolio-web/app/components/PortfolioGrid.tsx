@@ -97,7 +97,7 @@ function PortfolioCard({
             <div className="absolute inset-x-0 bottom-0 flex translate-y-4 items-end justify-between p-4 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
               <div className="flex items-center gap-2">
                 {portfolio.user?.avatar &&
-                portfolio.user.avatar !== "default-avatar.png" ? (
+                  portfolio.user.avatar !== "default-avatar.png" ? (
                   <img
                     src={portfolio.user.avatar}
                     alt={authorName}
@@ -224,7 +224,7 @@ export default function PortfolioGrid({
       ).sort(),
     [displayPortfolios],
   );
-  
+
   const colors = useMemo(() => {
     const allColors = displayPortfolios.flatMap((p) => p.colors || []);
     return Array.from(new Set(allColors.map((c) => c.toLowerCase()))).sort();
@@ -278,7 +278,7 @@ export default function PortfolioGrid({
               options={tagOptions}
               minWidth="160px"
             />
-            
+
             <ColorPickerFilter
               colors={colors}
               selectedColor={selectedColor}

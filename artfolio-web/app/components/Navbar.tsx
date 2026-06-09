@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import {
   usePathname,
@@ -192,12 +191,11 @@ export default function Navbar() {
                   className="flex max-w-[190px] items-center gap-2 rounded-md px-2 py-1.5 text-sm font-semibold hover:bg-surface-soft"
                 >
                   {currentUser?.avatar && currentUser.avatar !== "default-avatar.png" ? (
-                    <Image
+                    <img
                       src={currentUser.avatar}
                       alt={currentUser.name}
-                      width={28}
-                      height={28}
                       className="h-7 w-7 rounded-full object-cover"
+                      referrerPolicy="no-referrer"
                     />
                   ) : (
                     <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary text-xs font-bold text-white">
@@ -286,12 +284,11 @@ export default function Navbar() {
                     onClick={() => setIsOpen(false)}
                   >
                     {currentUser?.avatar && currentUser.avatar !== "default-avatar.png" ? (
-                      <Image
+                      <img
                         src={currentUser.avatar}
                         alt={currentUser.name}
-                        width={28}
-                        height={28}
                         className="h-7 w-7 rounded-full object-cover"
+                        referrerPolicy="no-referrer"
                       />
                     ) : (
                       <UserRound className="h-5 w-5 text-primary" aria-hidden />

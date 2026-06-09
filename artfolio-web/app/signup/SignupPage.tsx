@@ -31,7 +31,6 @@ export default function SignupPage({ nextPath }: SignupPageProps) {
   const [apiError, setApiError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Nếu đã đăng nhập, chuyển về dashboard
   useEffect(() => {
     if (isAuthenticated) router.replace(redirectPath);
   }, [isAuthenticated, redirectPath, router]);
@@ -48,9 +47,20 @@ export default function SignupPage({ nextPath }: SignupPageProps) {
   const onSubmit = async (values: SignupFormValues) => {
     setIsSubmitting(true);
     setApiError("");
+
     try {
-      await signup({ name: values.name, email: values.email, password: values.password });
-      router.replace(`/login?registered=1&next=${encodeURIComponent(redirectPath)}`);
+      await signup({
+        name: values.name,
+        email: values.email,
+        password: values.password,
+      });
+
+      const params = new URLSearchParams({
+        email: values.email,
+        next: redirectPath,
+      });
+
+      router.replace(`/verify-otp?${params.toString()}`);
     } catch (err) {
       setApiError(err instanceof Error ? err.message : "Tạo tài khoản thất bại.");
     } finally {
@@ -119,19 +129,17 @@ export default function SignupPage({ nextPath }: SignupPageProps) {
             </label>
 
             <label className="field">
-              <span className="label">Nhap lai mat khau</span>
+              <span className="label">Nhập lại mật khẩu</span>
               <input
                 id="signup-confirm-password"
                 className={`input${errors.confirmPassword ? " input-error" : ""}`}
                 type="password"
                 autoComplete="new-password"
-                placeholder="Nhap lai mat khau"
+                placeholder="Nhập lại mật khẩu"
                 {...register("confirmPassword")}
               />
               {errors.confirmPassword && (
-                <span className="error-text">
-                  {errors.confirmPassword.message}
-                </span>
+                <span className="error-text">{errors.confirmPassword.message}</span>
               )}
             </label>
 

@@ -1,9 +1,52 @@
-
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { env } from '../config/environment.js'
 
 const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY)
 
+// Các model Gemini còn hoạt động năm 2026, thử lần lượt khi hết quota
+const MODELS = [
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-2.0-flash',
+]
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+const generateWithFallback = async (prompt) => {
+  let lastError
+
+  for (const modelName of MODELS) {
+    try {
+      console.log(`Thử model: ${modelName}`)
+      const model = genAI.getGenerativeModel({ model: modelName })
+      const result = await model.generateContent(prompt)
+      return result.response.text()
+    } catch (error) {
+      lastError = error
+
+      if (error.status === 429) {
+        console.warn(`${modelName} hết quota (429), thử model tiếp theo...`)
+        continue
+      }
+
+      if (error.status === 503) {
+        console.warn(`${modelName} quá tải (503), chờ 3s rồi thử model tiếp theo...`)
+        await sleep(3000)
+        continue
+      }
+
+      if (error.status === 404) {
+        console.warn(`${modelName} không tồn tại (404), thử model tiếp theo...`)
+        continue
+      }
+
+      // Lỗi khác (401, 400...) → dừng luôn
+      throw error
+    }
+  }
+
+  throw lastError
+}
 
 export const analyzePalette = async (req, res) => {
   try {
@@ -16,10 +59,7 @@ export const analyzePalette = async (req, res) => {
       })
     }
 
-    // Giới hạn 10 màu mỗi lần phân tích
     const colorList = colors.slice(0, 10).join(', ')
-
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
 
     const prompt = `
 Bạn là chuyên gia thiết kế màu sắc và nghệ thuật thị giác. Hãy phân tích bảng màu sau theo phong cách của một nhà phê bình nghệ thuật chuyên nghiệp.
@@ -34,8 +74,7 @@ Hãy trả lời bằng tiếng Việt, gồm 3 phần ngắn gọn:
 Giữ câu trả lời trong 150-200 từ, ngắn gọn và hữu ích.
     `.trim()
 
-    const result = await model.generateContent(prompt)
-    const analysis = result.response.text()
+    const analysis = await generateWithFallback(prompt)
 
     return res.status(200).json({
       status: 'success',
@@ -45,11 +84,24 @@ Giữ câu trả lời trong 150-200 từ, ngắn gọn và hữu ích.
   } catch (error) {
     console.error('analyzePalette error FULL:', error)
 
-    // Xử lý lỗi API key không hợp lệ
-    if (error.message?.includes('API_KEY')) {
+    if (error.status === 429) {
+      return res.status(429).json({
+        status: 'error',
+        message: 'Dịch vụ AI đã hết giới hạn miễn phí hôm nay. Vui lòng thử lại sau hoặc nâng cấp tài khoản tại https://ai.dev'
+      })
+    }
+
+    if (error.status === 503) {
       return res.status(503).json({
         status: 'error',
-        message: 'Dịch vụ AI tạm thời không khả dụng. Vui lòng thử lại sau.'
+        message: 'Dịch vụ AI đang quá tải, vui lòng thử lại sau ít phút.'
+      })
+    }
+
+    if (error.message?.includes('API_KEY') || error.status === 401 || error.status === 403) {
+      return res.status(503).json({
+        status: 'error',
+        message: 'Cấu hình API không hợp lệ. Vui lòng kiểm tra lại GEMINI_API_KEY.'
       })
     }
 

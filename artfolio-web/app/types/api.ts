@@ -73,6 +73,9 @@ export type AuthStoreContract = {
     email: string;
     password: string;
   }) => Promise<void>;
+  verifySignupOtp: (payload: { email: string; otp: string }) => Promise<void>;
+  resendSignupOtp: (email: string) => Promise<string | undefined>;
+  googleLogin: (idToken: string) => Promise<void>;
   logout: () => Promise<void>;
 };
 
