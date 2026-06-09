@@ -1,5 +1,3 @@
-
-
 import { v2 as cloudinary } from 'cloudinary'
 import { CloudinaryStorage } from 'multer-storage-cloudinary'
 import multer from 'multer'
@@ -38,6 +36,24 @@ const fileFilter = (req, file, cb) => {
   }
 }
 
+// Cloudinary Storage riêng cho avatar người dùng
+const avatarStorage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: 'artfolio/avatars',
+    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+    transformation: [
+      {
+        width: 400,
+        height: 400,
+        crop: 'fill',     // Cắt vuông cân đối
+        gravity: 'face',  // Ưu tiên căn theo khuôn mặt
+        quality: 'auto:good'
+      }
+    ]
+  }
+})
+
 // Export middleware upload (dùng trong route)
 export const uploadSingle = multer({
   storage,
@@ -50,6 +66,13 @@ export const uploadMultiple = multer({
   fileFilter,
   limits: { fileSize: 10 * 1024 * 1024 }
 }).array('images', 5) // Tối đa 5 ảnh
+
+// Middleware upload avatar (field name: 'avatar', tối đa 5MB)
+export const uploadAvatar = multer({
+  storage: avatarStorage,
+  fileFilter,
+  limits: { fileSize: 5 * 1024 * 1024 } // 5MB
+}).single('avatar')
 
 // Export cloudinary instance để dùng ở controller (xóa ảnh)
 export { cloudinary }

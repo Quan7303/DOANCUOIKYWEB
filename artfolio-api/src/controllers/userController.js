@@ -3,6 +3,7 @@ import Portfolio from '~/models/portfolioModel.js'
 import Notification from '~/models/notificationModel.js'
 import { ApiError } from '~/utils/ApiError.js'
 import { emitNotification } from '~/sockets/socketHandler.js'
+import { cloudinary } from '~/middlewares/uploadMiddleware.js'
 
 const getUserProfile = async (req, res, next) => {
   try {
@@ -127,8 +128,75 @@ const toggleFollow = async (req, res, next) => {
   }
 }
 
+const updateAvatar = async (req, res, next) => {
+  try {
+    // Kiểm tra quyền: chỉ chủ sở hữu hoặc admin mới được cập nhật
+    if (req.params.id !== req.user._id.toString() && req.user.role !== 'admin') {
+      // Nếu đã upload lên Cloudinary nhưng bị chặn quyền → xóa file vừa upload
+      if (req.file?.filename) {
+        await cloudinary.uploader.destroy(req.file.filename)
+      }
+      return next(new ApiError(403, 'Bạn không có quyền cập nhật ảnh đại diện này.'))
+    }
+
+    if (!req.file) {
+      return next(new ApiError(400, 'Vui lòng chọn một file ảnh để tải lên.'))
+    }
+
+    // Lấy user hiện tại để kiểm tra avatar cũ
+    const user = await User.findById(req.params.id).select('avatar')
+    if (!user) {
+      await cloudinary.uploader.destroy(req.file.filename)
+      return next(new ApiError(404, 'Không tìm thấy người dùng.'))
+    }
+
+    // Xóa avatar cũ trên Cloudinary nếu không phải ảnh mặc định
+    const oldAvatar = user.avatar
+    if (oldAvatar && !oldAvatar.includes('default-avatar')) {
+      // Trích public_id từ URL Cloudinary (phần sau /upload/ và trước dấu chấm cuối)
+      const matches = oldAvatar.match(/\/upload\/(?:v\d+\/)?(.+)\.[a-z]+$/i)
+      if (matches && matches[1]) {
+        try {
+          await cloudinary.uploader.destroy(matches[1])
+        } catch (err) {
+          // Không dừng flow nếu xóa ảnh cũ thất bại
+          console.warn('Không thể xóa avatar cũ:', err.message)
+        }
+      }
+    }
+
+    // Cập nhật avatar mới vào database
+    const updatedUser = await User.findByIdAndUpdate(
+      req.params.id,
+      { $set: { avatar: req.file.path } }, // req.file.path là URL Cloudinary
+      { new: true, runValidators: true }
+    ).select('-password -__v')
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Cập nhật ảnh đại diện thành công.',
+      data: {
+        avatar: updatedUser.avatar,
+        user: updatedUser
+      }
+    })
+  } catch (error) {
+    // Dọn dẹp file đã upload nếu có lỗi xảy ra
+    if (req.file?.filename) {
+      try {
+        await cloudinary.uploader.destroy(req.file.filename)
+      } catch (cleanupErr) {
+        console.warn('Cleanup avatar upload thất bại:', cleanupErr.message)
+      }
+    }
+    console.error('updateAvatar error:', error.message)
+    next(error)
+  }
+}
+
 export const userController = {
   getUserProfile,
   updateUserProfile,
+  updateAvatar,
   toggleFollow
 }
