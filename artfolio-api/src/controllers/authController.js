@@ -136,6 +136,32 @@ const login = async (req, res, next) => {
   }
 }
 
+/**
+ * POST /api/v1/auth/google-login
+ * Body: { idToken: string }  — Google credential từ frontend (Google Identity Services)
+ */
+const googleLogin = async (req, res, next) => {
+  try {
+    const { idToken } = req.body
+    const result = await authService.loginWithGoogle(idToken)
+
+    // Đặt refreshToken vào cookie httpOnly giống login thường
+    res.cookie('refreshToken', result.refreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      maxAge: 14 * 24 * 60 * 60 * 1000
+    })
+
+    res.status(200).json({
+      user: result.user,
+      accessToken: result.accessToken
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
 const logout = async (req, res, next) => {
   try {
     res.clearCookie('refreshToken', {
@@ -162,6 +188,7 @@ const refreshToken = async (req, res, next) => {
 export const authController = {
   signup,
   login,
+  googleLogin,
   logout,
   refreshToken
 }
