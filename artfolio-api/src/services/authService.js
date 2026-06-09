@@ -4,6 +4,9 @@ import { OAuth2Client } from 'google-auth-library'
 import User from '~/models/userModel.js'
 import { env } from '~/config/environment.js'
 import { ApiError } from '~/utils/ApiError.js'
+import { createOTP } from './otpService.js'
+import { sendOTPEmail } from './emailService.js'
+import { OTP } from '~/models/otpModel.js'
 
 const googleClient = new OAuth2Client(env.GOOGLE_CLIENT_ID)
 
@@ -34,18 +37,18 @@ const signup = async (reqBody) => {
   const salt = await bcrypt.genSalt(10)
   const hashedPassword = await bcrypt.hash(password, salt)
 
-  const newUser = await User.create({
+  await User.create({
     name,
     email,
     password: hashedPassword,
     role: 'user',
-    active: 'active'
+    active: 'verify'
   })
 
-  const userResponse = newUser.toObject()
-  delete userResponse.password
+  const otp = await createOTP(email)
+  await sendOTPEmail(email, otp, 'verify_account')
 
-  return userResponse
+  return { message: 'Tạo tài khoản thành công! Vui lòng kiểm tra email để lấy mã xác thực OTP.' }
 }
 
 const login = async (reqBody) => {
@@ -175,9 +178,68 @@ const refreshToken = async (incomingRefreshToken) => {
   }
 }
 
+const verifySignupOTP = async (email, otp) => {
+  const otpRecord = await OTP.findOne({ email, otp })
+
+  if (!otpRecord) {
+    throw new ApiError(400, 'Mã xác thực OTP không đúng!')
+  }
+
+  if (otpRecord.expiresAt < new Date()) {
+    throw new ApiError(400, 'Mã xác thực OTP đã hết hạn!')
+  }
+
+  const user = await User.findOne({ email }).select('+password')
+  if (!user) {
+    throw new ApiError(404, 'Không tìm thấy tài khoản để kích hoạt!')
+  }
+
+  if (user.active === 'active') {
+    throw new ApiError(400, 'Tài khoản này đã được kích hoạt từ trước!')
+  }
+
+  user.active = 'active'
+  await user.save()
+
+  await OTP.deleteMany({ email })
+
+  const accessToken = generateAccessToken(user)
+  const refreshToken = generateRefreshToken(user)
+
+  const userResponse = user.toObject()
+  delete userResponse.password
+
+  return {
+    user: userResponse,
+    accessToken,
+    refreshToken,
+    message: 'Xác thực và kích hoạt tài khoản thành công!'
+  }
+}
+
+const resendSignupOTP = async (email) => {
+  if (!email) throw new ApiError(400, 'Yêu cầu phải có email!')
+
+  const user = await User.findOne({ email })
+  if (!user) {
+    throw new ApiError(404, 'Email không tồn tại trong hệ thống!')
+  }
+
+  if (user.active === 'active') {
+    throw new ApiError(400, 'Tài khoản này đã được kích hoạt, không cần gửi lại OTP.')
+  }
+
+  const otp = await createOTP(email)
+  await sendOTPEmail(email, otp, 'verify_account')
+
+  return { message: 'Đã gửi lại mã OTP mới vào email của bạn. Vui lòng kiểm tra hộp thư.' }
+}
+
 export const authService = {
   signup,
   login,
   loginWithGoogle,
-  refreshToken
+  refreshToken,
+  verifySignupOTP,
+  resendSignupOTP
 }

@@ -25,6 +25,8 @@ const loginLimiter = rateLimit({
 
 // AUTH
 router.post('/signup', signupValidation, authController.signup)
+router.post('/verify-signup-otp', authController.verifySignupOTP)
+router.post('/resend-signup-otp', authController.resendSignupOTP)
 
 router.post(
   '/login',

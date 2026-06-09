@@ -21,7 +21,7 @@ export const forgotPassword = async (req, res) => {
 
     const otp = await createOTP(email)
 
-    await sendOTPEmail(email, otp)
+    await sendOTPEmail(email, otp, 'reset_password')
 
     return res.status(200).json({
       message: 'Đã gửi OTP về email'
@@ -185,10 +185,47 @@ const refreshToken = async (req, res, next) => {
   }
 }
 
+const verifySignupOTP = async (req, res, next) => {
+  try {
+    const { email, otp } = req.body
+    const result = await authService.verifySignupOTP(email, otp)
+
+    res.cookie('refreshToken', result.refreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      maxAge: 14 * 24 * 60 * 60 * 1000
+    })
+
+    res.status(200).json({
+      message: result.message,
+      user: result.user,
+      accessToken: result.accessToken
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+const resendSignupOTP = async (req, res, next) => {
+  try {
+    const { email } = req.body
+    const result = await authService.resendSignupOTP(email)
+    res.status(200).json(result)
+  } catch (error) {
+    next(error)
+  }
+}
+
 export const authController = {
   signup,
   login,
   googleLogin,
   logout,
-  refreshToken
+  refreshToken,
+  forgotPassword,
+  verifyOTP,
+  resetPassword,
+  verifySignupOTP,
+  resendSignupOTP
 }
