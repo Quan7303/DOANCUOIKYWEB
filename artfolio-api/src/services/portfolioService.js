@@ -215,21 +215,15 @@ const deletePortfolio = async (portfolioId, user) => {
 
 
   const session = await mongoose.startSession()
-  let isTransactionActive = false
 
   try {
-    session.startTransaction()
-    isTransactionActive = true
-
-    await Portfolio.deleteOne({ _id: portfolioId }, { session })
-    await Comment.deleteMany({ portfolio: portfolioId }, { session })
-    await Notification.deleteMany({ portfolio: portfolioId }, { session })
-
-    await session.commitTransaction()
+    await session.withTransaction(async () => {
+      await Portfolio.deleteOne({ _id: portfolioId }, { session })
+      await Comment.deleteMany({ portfolio: portfolioId }, { session })
+      await Notification.deleteMany({ portfolio: portfolioId }, { session })
+    })
   } catch (transactionError) {
-    if (isTransactionActive) await session.abortTransaction()
-
-    console.warn('⚠️ Transaction không được hỗ trợ. Chuyển sang xóa tuần tự (Fallback)...')
+    console.warn('⚠️ Transaction bị lỗi hoặc không được hỗ trợ. Chuyển sang xóa tuần tự (Fallback)...')
     await Portfolio.deleteOne({ _id: portfolioId })
     await Comment.deleteMany({ portfolio: portfolioId })
     await Notification.deleteMany({ portfolio: portfolioId })

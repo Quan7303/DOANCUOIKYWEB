@@ -16,6 +16,9 @@ Router.route('/users')
 Router.route('/users/:id/status')
   .patch(adminController.changeUserStatus)
 
+Router.route('/users/:id')
+  .delete(adminController.deleteUserByAdmin)
+
 Router.route('/portfolios/:id')
   .delete(adminController.deletePortfolioByAdmin)
 

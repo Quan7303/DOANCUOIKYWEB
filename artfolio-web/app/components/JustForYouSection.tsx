@@ -71,7 +71,7 @@ export default function JustForYouSection() {
             Dành cho bạn
           </h2>
           <p className="mt-3 text-lg text-muted">
-            Gợi ý dựa trên tác giả bạn theo dõi và tác phẩm bạn yêu thích.
+            Những tác phẩm mới nhất từ các tác giả mà bạn đang theo dõi.
           </p>
         </div>
 

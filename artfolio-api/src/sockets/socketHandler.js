@@ -39,7 +39,9 @@ export const initSocket = (io) => {
 }
 
 
-export const emitNotification = (io, targetUserId, type, senderName, portfolioTitle = '', portfolioId = '') => {
+export const emitNotification = (io, targetUserId, type, sender, portfolioTitle = '', portfolioId = '') => {
+  const senderName = sender?.name || 'Ai đó'
+  
   const messages = {
     like:    `${senderName} đã thích tác phẩm "${portfolioTitle}"`,
     comment: `${senderName} đã bình luận vào "${portfolioTitle}"`,
@@ -62,7 +64,12 @@ export const emitNotification = (io, targetUserId, type, senderName, portfolioTi
     type,
     title:   titles[type] || 'Thông báo mới',
     message: messages[type] || `${senderName} đã tương tác với bạn`,
-    link:    links[type]
+    link:    links[type],
+    sender: {
+      _id: sender?._id || '',
+      name: senderName,
+      avatar: sender?.avatar || 'default-avatar.png'
+    }
   })
 }
 

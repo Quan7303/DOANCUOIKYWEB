@@ -13,7 +13,8 @@ import {
   Ban,
   Clock,
   RefreshCw,
-  Loader2
+  Loader2,
+  Trash2
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../store/useAuthStore";
@@ -148,6 +149,37 @@ export default function AdminClient() {
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : "Lỗi khi cập nhật trạng thái");
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleDeleteUser = async (userId: string, userName: string) => {
+    if (!accessToken) return;
+    const confirmMessage = `CẢNH BÁO: Việc xóa tài khoản "${userName}" sẽ xóa toàn bộ tác phẩm, bình luận, thông báo và dữ liệu liên quan. Hành động này không thể hoàn tác!\n\nBạn có CHẮC CHẮN muốn xóa tài khoản này?`;
+      
+    if (!window.confirm(confirmMessage)) return;
+
+    setActionLoadingId(userId + "_delete");
+    try {
+      const res = await fetch(getApiUrl(`admin/users/${userId}`), {
+        method: "DELETE",
+        headers: { 
+          Authorization: `Bearer ${accessToken}` 
+        }
+      });
+      
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message || "Failed to delete user");
+      
+      toast.success(json.message || "Đã xóa tài khoản thành công");
+      // Update local state by removing the user
+      setUsers(currents => currents.filter(u => u._id !== userId));
+      // Refresh stats
+      fetchStats();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "Lỗi khi xóa tài khoản");
     } finally {
       setActionLoadingId(null);
     }
@@ -297,14 +329,26 @@ export default function AdminClient() {
                       </td>
                       <td className="px-6 py-4 text-right">
                         {u.role !== 'admin' && (
-                          <button
-                            type="button"
-                            disabled={actionLoadingId === u._id}
-                            onClick={() => handleToggleUserStatus(u._id, u.active)}
-                            className={`btn btn-sm ${u.active === 'ban' ? 'btn-outline border-emerald-500 text-emerald-500 hover:bg-emerald-500/10' : 'btn-outline border-danger text-danger hover:bg-danger/10'}`}
-                          >
-                            {actionLoadingId === u._id ? <Loader2 className="h-3 w-3 animate-spin" /> : u.active === 'ban' ? 'Mở khóa' : 'Khóa'}
-                          </button>
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              disabled={actionLoadingId === u._id || actionLoadingId === u._id + "_delete"}
+                              onClick={() => handleToggleUserStatus(u._id, u.active)}
+                              className={`btn btn-sm ${u.active === 'ban' ? 'btn-outline border-emerald-500 text-emerald-500 hover:bg-emerald-500/10' : 'btn-outline border-warning text-warning hover:bg-warning/10'}`}
+                              title={u.active === 'ban' ? 'Mở khóa' : 'Khóa tài khoản'}
+                            >
+                              {actionLoadingId === u._id ? <Loader2 className="h-4 w-4 animate-spin" /> : u.active === 'ban' ? 'Mở khóa' : 'Khóa'}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={actionLoadingId === u._id || actionLoadingId === u._id + "_delete"}
+                              onClick={() => handleDeleteUser(u._id, u.name)}
+                              className="btn btn-sm btn-outline border-danger text-danger hover:bg-danger/10 p-2"
+                              title="Xóa vĩnh viễn"
+                            >
+                              {actionLoadingId === u._id + "_delete" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>

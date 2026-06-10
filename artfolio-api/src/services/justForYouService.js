@@ -52,11 +52,8 @@ const getJustForYouFeed = async (userId, query = {}) => {
 
   const followingIds = currentUser.following || []
 
-  // 2. Lấy tag từ các bài đã tym
-  const likedTags = await getLikedTags(userId)
-
-  // Nếu user chưa follow ai và chưa tym bài nào → trả về rỗng
-  if (followingIds.length === 0 && likedTags.length === 0) {
+  // Nếu user chưa follow ai → trả về rỗng
+  if (followingIds.length === 0) {
     return {
       results: 0,
       totalCount: 0,
@@ -64,91 +61,27 @@ const getJustForYouFeed = async (userId, query = {}) => {
       currentPage: page,
       data: [],
       meta: {
-        followingCount: 0,
-        likedTagsUsed: []
+        followingCount: 0
       }
     }
   }
 
-  // 3. Xây dựng điều kiện tổng hợp ($or)
-  const orConditions = []
-
-  if (followingIds.length > 0) {
-    orConditions.push({ user: { $in: followingIds } })
-  }
-
-  if (likedTags.length > 0) {
-    orConditions.push({
-      tags: {
-        $in: likedTags.map((t) => new RegExp(`^${t}$`, 'i'))
-      }
-    })
-  }
-
-  // Không hiển thị bài của chính user trong feed
+  // Không hiển thị bài của chính user trong feed (tuy rằng user không follow chính mình, nhưng cứ cẩn thận)
   const userObjectId = new mongoose.Types.ObjectId(userId)
-  const baseQuery = {
-    user: { $ne: userObjectId },
-    $or: orConditions
-  }
-
-  // 4. Chuyển followingIds sang ObjectId để dùng trong aggregation $in
   const followingObjectIds = followingIds.map(
     (id) => new mongoose.Types.ObjectId(id.toString())
   )
 
-  // 5. Aggregation pipeline:
-  //    - Tính relevanceScore: +2 nếu tác giả được follow, +1 mỗi tag khớp (tối đa 5 tag)
-  //    - Sort theo score giảm dần, sau đó theo thời gian tạo mới nhất
-  //    - Phân trang với $facet
-  const tagScoreFields = likedTags.slice(0, 5).map((tag) => ({
-    $cond: [
-      {
-        $gt: [
-          {
-            $size: {
-              $filter: {
-                input: { $ifNull: ['$tags', []] },
-                as: 'tag',
-                cond: {
-                  $regexMatch: {
-                    input: '$$tag',
-                    regex: `^${tag}$`,
-                    options: 'i'
-                  }
-                }
-              }
-            }
-          },
-          0
-        ]
-      },
-      1,
-      0
-    ]
-  }))
+  const baseQuery = {
+    user: { $in: followingObjectIds, $ne: userObjectId }
+  }
 
+  // 5. Aggregation pipeline:
+  //    - Chỉ cần sort theo thời gian tạo mới nhất
+  //    - Phân trang với $facet
   const pipeline = [
     { $match: baseQuery },
-    {
-      $addFields: {
-        relevanceScore: {
-          $add: [
-            // +2 nếu tác giả được follow
-            {
-              $cond: [
-                { $in: ['$user', followingObjectIds] },
-                2,
-                0
-              ]
-            },
-            // +1 cho mỗi tag khớp (tối đa 5 tag → tối đa +5 điểm)
-            ...tagScoreFields
-          ]
-        }
-      }
-    },
-    { $sort: { relevanceScore: -1, createdAt: -1 } },
+    { $sort: { createdAt: -1 } },
     {
       $facet: {
         data: [
@@ -182,8 +115,7 @@ const getJustForYouFeed = async (userId, query = {}) => {
     currentPage: page,
     data: portfolios,
     meta: {
-      followingCount: followingIds.length,
-      likedTagsUsed: likedTags.slice(0, 10)
+      followingCount: followingIds.length
     }
   }
 }

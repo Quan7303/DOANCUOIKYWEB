@@ -58,6 +58,10 @@ function isActive(
     );
   }
 
+  if (href === "/admin") {
+    return pathname.startsWith("/admin");
+  }
+
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -156,6 +160,11 @@ export default function Navbar() {
           {signedIn && (
             <Link href="/dashboard?tab=profile" className={linkClass("/dashboard")}>
               Dashboard
+            </Link>
+          )}
+          {signedIn && currentUser?.role === "admin" && (
+            <Link href="/admin" className={linkClass("/admin")}>
+              Quản trị
             </Link>
           )}
         </div>
@@ -272,6 +281,15 @@ export default function Navbar() {
                 onClick={() => setIsOpen(false)}
               >
                 Dashboard
+              </Link>
+            )}
+            {signedIn && currentUser?.role === "admin" && (
+              <Link
+                href="/admin"
+                className={linkClass("/admin")}
+                onClick={() => setIsOpen(false)}
+              >
+                Quản trị
               </Link>
             )}
 
