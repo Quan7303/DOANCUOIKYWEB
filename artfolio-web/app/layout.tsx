@@ -4,6 +4,7 @@ import Footer from "./components/Footer";
 import Navbar from "./components/Navbar";
 import ThemeInitializer from "./components/ThemeInitializer";
 import ServiceWorkerRegister from "./components/ServiceWorkerRegister";
+import GoogleProvider from "./components/GoogleProvider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -77,10 +78,12 @@ export default function RootLayout({
         />
         <ServiceWorkerRegister />
         <ThemeInitializer />
-        <Navbar />
-        <main className="flex-1">{children}</main>
-        {modal}
-        <Footer />
+        <GoogleProvider>
+          <Navbar />
+          <main className="flex-1">{children}</main>
+          {modal}
+          <Footer />
+        </GoogleProvider>
       </body>
     </html>
   );

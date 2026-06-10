@@ -3,7 +3,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   GoogleLogin,
-  GoogleOAuthProvider,
   type CredentialResponse,
 } from "@react-oauth/google";
 import Link from "next/link";
@@ -23,7 +22,6 @@ function getSafeNextPath(value?: string) {
   if (!value || !value.startsWith("/") || value.startsWith("//")) {
     return "/dashboard";
   }
-
   return value;
 }
 
@@ -42,7 +40,6 @@ export default function LoginPage({
   const [apiError, setApiError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
-  const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
 
   useEffect(() => {
     if (isAuthenticated) router.replace(redirectPath);
@@ -60,7 +57,6 @@ export default function LoginPage({
   const onSubmit = async (values: LoginFormValues) => {
     setIsSubmitting(true);
     setApiError("");
-
     try {
       await login(values.email, values.password);
       router.replace(redirectPath);
@@ -76,10 +72,8 @@ export default function LoginPage({
       setApiError("Không nhận được mã xác thực từ Google.");
       return;
     }
-
     setIsGoogleSubmitting(true);
     setApiError("");
-
     try {
       await googleLogin(credentialResponse.credential);
       router.replace(redirectPath);
@@ -170,30 +164,22 @@ export default function LoginPage({
             <span className="h-px flex-1 bg-border" />
           </div>
 
-          {googleClientId ? (
-            <div className="grid place-items-center">
-              <GoogleOAuthProvider clientId={googleClientId}>
-                <GoogleLogin
-                  onSuccess={handleGoogleSuccess}
-                  onError={() => setApiError("Đăng nhập Google thất bại.")}
-                  theme="outline"
-                  size="large"
-                  text="signin_with"
-                  shape="rectangular"
-                  width="360"
-                />
-              </GoogleOAuthProvider>
-              {isGoogleSubmitting && (
-                <p className="mt-2 text-sm font-semibold text-muted">
-                  Đang đăng nhập Google...
-                </p>
-              )}
-            </div>
-          ) : (
-            <div className="rounded-lg border border-border bg-surface-soft p-3 text-sm font-semibold text-muted">
-              Chưa cấu hình Google Client ID.
-            </div>
-          )}
+          <div className="grid place-items-center">
+            <GoogleLogin
+              onSuccess={handleGoogleSuccess}
+              onError={() => setApiError("Đăng nhập Google thất bại.")}
+              theme="outline"
+              size="large"
+              text="signin_with"
+              shape="rectangular"
+              width="360"
+            />
+            {isGoogleSubmitting && (
+              <p className="mt-2 text-sm font-semibold text-muted">
+                Đang đăng nhập Google...
+              </p>
+            )}
+          </div>
 
           <p className="mt-5 text-center text-sm text-muted">
             Chưa có tài khoản?{" "}
