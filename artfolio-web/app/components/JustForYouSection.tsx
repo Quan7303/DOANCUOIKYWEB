@@ -83,4 +83,5 @@ export default function JustForYouSection() {
       </div>
     </section>
   );
+  
 }
