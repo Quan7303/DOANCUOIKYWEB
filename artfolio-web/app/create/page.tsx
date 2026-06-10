@@ -77,11 +77,13 @@ export default function CreatePortfolioPage() {
   const imagePreviewsRef = useRef<string[]>([]);
 
   // AI State
-  const [aiAnalysis, setAiAnalysis] = useState("");
+  const [aiSuggestedTitle, setAiSuggestedTitle] = useState("");
+  const [aiSuggestedTags, setAiSuggestedTags] = useState("");
   const [aiError, setAiError] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
-  const { register, handleSubmit, formState: { errors } } = useForm<CreateFormValues>({
+  const { register, handleSubmit, setValue, formState: { errors } } = useForm<CreateFormValues>({
     resolver: zodResolver(createSchema),
     defaultValues: { category: "design", tags: "" }
   });
@@ -150,12 +152,13 @@ export default function CreatePortfolioPage() {
 
   const handleRemoveImage = (index: number) => {
     URL.revokeObjectURL(imagePreviews[index]);
-
     const newFiles = imageFiles.filter((_, i) => i !== index);
     const newPreviews = imagePreviews.filter((_, i) => i !== index);
-
     setImageFiles(newFiles);
     setImagePreviews(newPreviews);
+    if (selectedImageIndex >= newFiles.length) {
+      setSelectedImageIndex(Math.max(0, newFiles.length - 1));
+    }
   };
 
   const handleColorChange = (index: number, newColor: string) => {
@@ -173,36 +176,106 @@ export default function CreatePortfolioPage() {
 
   const validColors = colors.filter((color) => HEX_COLOR_PATTERN.test(color));
 
-  const analyzePaletteWithAI = async () => {
-    if (!accessToken) return;
-    if (validColors.length !== colors.length) {
-      setAiError("Vui long nhap dung ma mau HEX, vi du #66D7EE.");
+  const analyzeImageWithAI = async () => {
+    if (imageFiles.length === 0) {
+      setAiError("chưa thêm ảnh");
       return;
     }
 
     setIsAnalyzing(true);
     setAiError("");
+    setAiSuggestedTitle("");
+    setAiSuggestedTags("");
+
     try {
-      const res = await fetch(getApiUrl("ai/analyze-palette"), {
+      // Convert ảnh được chọn sang base64
+      const file = imageFiles[selectedImageIndex];
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onerror = () => reject(new Error("Không đọc được file ảnh"));
+        reader.readAsDataURL(file);
+      });
+
+      const res = await fetch(getApiUrl("ai/analyze-image"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${accessToken}`
         },
-        body: JSON.stringify({ colors: validColors })
+        body: JSON.stringify({
+          imageBase64: base64Data,
+          mimeType: file.type
+        })
       });
 
       const data = await res.json();
-      if (res.ok) {
-        setAiAnalysis(data.analysis);
+
+      if (res.ok && data.status === "success") {
+        setAiSuggestedTitle(data.title || "");
+        setAiSuggestedTags(data.tags || "");
       } else {
-        setAiError(data.message || "Không thể phân tích bảng màu.");
+        setAiError(data.message || "Không thể phân tích ảnh. Vui lòng thử lại.");
       }
     } catch {
-      setAiError("Không kết nối được AI server.");
+      setAiError("Không kết nối được AI server. Vui lòng thử lại.");
     } finally {
       setIsAnalyzing(false);
     }
+  };
+
+  const analyzeAllImagesWithAI = async () => {
+    if (imageFiles.length === 0) {
+      setAiError("chưa thêm ảnh");
+      return;
+    }
+
+    setIsAnalyzing(true);
+    setAiError("");
+    setAiSuggestedTitle("");
+    setAiSuggestedTags("");
+
+    try {
+      // Convert tất cả ảnh sang base64
+      const imagesData = await Promise.all(
+        imageFiles.map(async (file) => {
+          const base64Data = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve((reader.result as string).split(",")[1]);
+            reader.onerror = () => reject(new Error("Không đọc được file ảnh"));
+            reader.readAsDataURL(file);
+          });
+          return { imageBase64: base64Data, mimeType: file.type };
+        })
+      );
+
+      const res = await fetch(getApiUrl("ai/analyze-images"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({ images: imagesData })
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.status === "success") {
+        setAiSuggestedTitle(data.title || "");
+        setAiSuggestedTags(data.tags || "");
+      } else {
+        setAiError(data.message || "Không thể phân tích ảnh. Vui lòng thử lại.");
+      }
+    } catch {
+      setAiError("Không kết nối được AI server. Vui lòng thử lại.");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const applyAISuggestions = () => {
+    if (aiSuggestedTitle) setValue("title", aiSuggestedTitle);
+    if (aiSuggestedTags) setValue("tags", aiSuggestedTags);
   };
 
   const onSubmit = async (values: CreateFormValues) => {
@@ -340,19 +413,10 @@ export default function CreatePortfolioPage() {
               {errors.description && <span className="error-text">{errors.description.message}</span>}
             </label>
 
-            {/* Bảng Màu & AI */}
+            {/* Bảng Màu */}
             <div className="surface mt-4 rounded-xl p-5 border-primary/20 bg-primary/5">
               <div className="flex items-center justify-between mb-4">
                 <span className="label text-primary">Bảng màu chủ đạo</span>
-                <button
-                  type="button"
-                  onClick={analyzePaletteWithAI}
-                  disabled={isAnalyzing}
-                  className="btn btn-primary h-8 px-3 text-xs gap-1.5 rounded-full"
-                >
-                  {isAnalyzing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                  AI Phân Tích
-                </button>
               </div>
               <div className="grid gap-3">
                 {colors.map((c, i) => {
@@ -402,19 +466,7 @@ export default function CreatePortfolioPage() {
                   ))}
                 </div>
               </div>
-              {aiError && (
-                <p className="mt-3 rounded-lg border border-danger/30 bg-danger/10 p-3 text-sm font-semibold text-danger">
-                  {aiError}
-                </p>
-              )}
-
-              {/* Kết quả AI */}
-              {aiAnalysis && (
-                <div className="mt-4 text-sm text-foreground bg-surface p-4 rounded-lg border border-primary/30 whitespace-pre-wrap leading-relaxed">
-                  <span className="font-bold text-primary block mb-1">🤖 Gemini Analysis:</span>
-                  {aiAnalysis}
-                </div>
-              )}
+              {/* end color grid */}
             </div>
           </div>
 
@@ -438,17 +490,32 @@ export default function CreatePortfolioPage() {
             ) : (
               <div className="grid grid-cols-2 gap-4">
                 {imagePreviews.map((preview, index) => (
-                  <div key={index} className="relative aspect-video rounded-xl border border-border bg-surface-soft overflow-hidden group">
+                  <div
+                    key={index}
+                    className={`relative aspect-video rounded-xl border-2 bg-surface-soft overflow-hidden group cursor-pointer transition-all ${
+                      selectedImageIndex === index
+                        ? "border-primary ring-2 ring-primary/30"
+                        : "border-border hover:border-primary/50"
+                    }`}
+                    onClick={() => setSelectedImageIndex(index)}
+                  >
                     <img src={preview} alt={`Preview ${index + 1}`} className="w-full h-full object-cover" />
                     <button
                       type="button"
-                      onClick={() => handleRemoveImage(index)}
+                      onClick={(e) => { e.stopPropagation(); handleRemoveImage(index); }}
                       className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 text-white backdrop-blur-md hover:bg-danger transition-colors opacity-0 group-hover:opacity-100"
                     >
                       <X className="h-4 w-4" />
                     </button>
-                    <div className="absolute bottom-2 left-2 px-2 py-0.5 text-[10px] font-bold bg-black/60 text-white rounded-md">
-                      Ảnh {index + 1}
+                    <div className="absolute bottom-2 left-2 flex items-center gap-1.5">
+                      <div className="px-2 py-0.5 text-[10px] font-bold bg-black/60 text-white rounded-md">
+                        Ảnh {index + 1}
+                      </div>
+                      {selectedImageIndex === index && (
+                        <div className="px-2 py-0.5 text-[10px] font-bold bg-primary text-white rounded-md flex items-center gap-1">
+                          <Sparkles className="h-2.5 w-2.5" /> AI
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -467,6 +534,76 @@ export default function CreatePortfolioPage() {
                 )}
               </div>
             )}
+
+            {/* AI Phân Tích Ảnh */}
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-5">
+              <div className="flex items-center justify-between mb-3">
+                <span className="label text-primary">AI Gợi Ý Tiêu Đề & Tags</span>
+                <div className="flex gap-2">
+                  {imageFiles.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={analyzeAllImagesWithAI}
+                      disabled={isAnalyzing}
+                      className="btn btn-outline h-8 px-3 text-xs gap-1.5 rounded-full border-primary text-primary hover:bg-primary/10"
+                    >
+                      {isAnalyzing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                      Phân Tích Tất Cả
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={analyzeImageWithAI}
+                    disabled={isAnalyzing}
+                    className="btn btn-primary h-8 px-3 text-xs gap-1.5 rounded-full"
+                  >
+                    {isAnalyzing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                    {isAnalyzing ? "Đang phân tích..." : "Phân Tích Ảnh"}
+                  </button>
+                </div>
+              </div>
+
+              {aiError && (
+                <p className="rounded-lg border border-danger/30 bg-danger/10 p-3 text-sm font-semibold text-danger">
+                  {aiError === "chưa thêm ảnh"
+                    ? "⚠️ Chưa thêm ảnh — vui lòng tải ảnh lên trước khi phân tích."
+                    : aiError}
+                </p>
+              )}
+
+              {(aiSuggestedTitle || aiSuggestedTags) && (
+                <div className="mt-2 rounded-lg border border-primary/30 bg-surface p-4 text-sm leading-relaxed">
+                  <span className="font-bold text-primary block mb-2">🤖 Gợi ý từ AI:</span>
+                  {aiSuggestedTitle && (
+                    <div className="mb-2">
+                      <span className="text-muted font-semibold">Tiêu đề: </span>
+                      <span className="text-foreground">{aiSuggestedTitle}</span>
+                    </div>
+                  )}
+                  {aiSuggestedTags && (
+                    <div className="mb-3">
+                      <span className="text-muted font-semibold">Tags: </span>
+                      <span className="text-foreground">{aiSuggestedTags}</span>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={applyAISuggestions}
+                    className="btn btn-primary h-8 px-4 text-xs rounded-full"
+                  >
+                    ✓ Áp dụng gợi ý
+                  </button>
+                </div>
+              )}
+
+              {!aiSuggestedTitle && !aiSuggestedTags && !aiError && !isAnalyzing && (
+                <p className="text-xs text-muted">
+                  {imageFiles.length > 1
+                    ? `Click vào ảnh để chọn ảnh phân tích (đang chọn Ảnh ${selectedImageIndex + 1}), rồi nhấn "Phân Tích Ảnh".`
+                    : `Tải ảnh lên rồi nhấn "Phân Tích Ảnh" để AI gợi ý tiêu đề và tags phù hợp.`}
+                </p>
+              )}
+            </div>
 
             <div className="mt-auto pt-6 border-t border-border">
               <button
