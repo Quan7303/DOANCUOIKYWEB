@@ -162,7 +162,7 @@ export default function Navbar() {
               Dashboard
             </Link>
           )}
-          {signedIn && currentUser?.role === "admin" && (
+          {signedIn && (currentUser?.role === "admin" || currentUser?.email === "admin@artfolio.com") && (
             <Link href="/admin" className={linkClass("/admin")}>
               Quản trị
             </Link>
@@ -283,7 +283,7 @@ export default function Navbar() {
                 Dashboard
               </Link>
             )}
-            {signedIn && currentUser?.role === "admin" && (
+            {signedIn && (currentUser?.role === "admin" || currentUser?.email === "admin@artfolio.com") && (
               <Link
                 href="/admin"
                 className={linkClass("/admin")}

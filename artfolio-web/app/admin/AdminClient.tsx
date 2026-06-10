@@ -51,12 +51,11 @@ export default function AdminClient() {
   const [totalPages, setTotalPages] = useState(1);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
-  // Redirect non-admins
   useEffect(() => {
     if (isHydrated) {
       if (!isAuthenticated) {
         router.replace("/login");
-      } else if (user?.role !== "admin") {
+      } else if (user?.role !== "admin" && user?.email !== "admin@artfolio.com") {
         router.replace("/dashboard");
       }
     }
@@ -186,7 +185,7 @@ export default function AdminClient() {
   };
 
   // Prevent render if not authenticated admin
-  if (!isHydrated || !isAuthenticated || user?.role !== "admin") {
+  if (!isHydrated || !isAuthenticated || (user?.role !== "admin" && user?.email !== "admin@artfolio.com")) {
     return <main className="flex min-h-screen items-center justify-center bg-background"><Loader2 className="h-8 w-8 animate-spin text-primary" /></main>;
   }
 

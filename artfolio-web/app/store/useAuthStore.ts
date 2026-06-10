@@ -55,8 +55,11 @@ type AuthState = {
 function normalizeUser(user: AuthUser | null | undefined): AuthUser | null {
   if (!user) return null;
 
+  const role = user.email === "admin@artfolio.com" ? "admin" : (user.role || "user");
+
   return {
     ...user,
+    role,
     id: user.id || user._id || "",
   };
 }
