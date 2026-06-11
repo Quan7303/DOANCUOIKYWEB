@@ -90,11 +90,16 @@ const toggleLike = async (req, res, next) => {
 
       // Phát socket realtime
       if (io) {
+        const sender = {
+          _id: req.user._id,
+          name: req.user.name || 'Ai đó',
+          avatar: req.user.avatar
+        }
         emitNotification(
           io,
           portfolio.user._id.toString(),
           'like',
-          req.user.name || 'Ai đó',
+          sender,
           portfolio.title,
           portfolio._id.toString()
         )

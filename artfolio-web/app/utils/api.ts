@@ -80,10 +80,11 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    const isUnauthorized = error.response?.status === 401;
+    const shouldRefreshAuth =
+      error.response?.status === 401 || error.response?.status === 410;
 
     if (
-      !isUnauthorized ||
+      !shouldRefreshAuth ||
       originalRequest._retry ||
       originalRequest.skipAuthRefresh ||
       isRefreshTokenRequest(originalRequest.url)

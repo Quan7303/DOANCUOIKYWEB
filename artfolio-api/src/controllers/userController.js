@@ -108,7 +108,12 @@ const toggleFollow = async (req, res, next) => {
 
       const io = req.app.get('io')
       if (io) {
-        emitNotification(io, targetUserId, 'follow', req.user.name || 'Ai đó')
+        const sender = {
+          _id: req.user._id,
+          name: req.user.name || 'Ai đó',
+          avatar: req.user.avatar
+        }
+        emitNotification(io, targetUserId, 'follow', sender)
       }
     }
 

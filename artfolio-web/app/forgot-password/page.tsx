@@ -45,7 +45,7 @@ export default function ForgotPasswordPage() {
       }
 
       // Chuyển hướng sang trang xác nhận OTP kèm query parameter email
-      router.push(`/verify-otp?email=${encodeURIComponent(values.email)}`);
+      router.push(`/verify-otp?mode=reset&email=${encodeURIComponent(values.email)}`);
     } catch (err) {
       setApiError(err instanceof Error ? err.message : "Đã xảy ra lỗi.");
     } finally {

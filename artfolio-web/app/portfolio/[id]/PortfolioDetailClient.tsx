@@ -173,15 +173,15 @@ export default function PortfolioDetailClient({
 
   const isLiked = optimisticLiked ?? serverIsLiked;
   const hasUnsavedEditChanges = useMemo(() => {
-  if (!initialEditValues) return false;
+    if (!initialEditValues) return false;
 
-  return (
-    editValues.title !== initialEditValues.title ||
-    editValues.description !== initialEditValues.description ||
-    editValues.category !== initialEditValues.category ||
-    editValues.tags !== initialEditValues.tags
-  );
-}, [editValues, initialEditValues]);
+    return (
+      editValues.title !== initialEditValues.title ||
+      editValues.description !== initialEditValues.description ||
+      editValues.category !== initialEditValues.category ||
+      editValues.tags !== initialEditValues.tags
+    );
+  }, [editValues, initialEditValues]);
 
   useEffect(() => {
     const socket: Socket = io(getSocketUrl(), {
@@ -295,9 +295,9 @@ export default function PortfolioDetailClient({
           setPortfolio((current) =>
             current
               ? {
-                  ...current,
-                  views: Number(json.data.views),
-                }
+                ...current,
+                views: Number(json.data.views),
+              }
               : current,
           );
         }
@@ -445,11 +445,11 @@ export default function PortfolioDetailClient({
       const nextFormState = updatedPortfolio
         ? getEditFormStateFromPortfolio(updatedPortfolio)
         : {
-            title,
-            description,
-            category: editValues.category,
-            tags: tags.join(", "),
-          };
+          title,
+          description,
+          category: editValues.category,
+          tags: tags.join(", "),
+        };
 
       setEditValues(nextFormState);
       setInitialEditValues(nextFormState);
@@ -626,7 +626,10 @@ export default function PortfolioDetailClient({
     setIsDeletingPortfolio(true);
 
     try {
-      const response = await fetch(getApiUrl(`portfolios/${portfolioId}`), {
+      const isAdminDeleting = !isOwner && currentUser?.role === "admin";
+      const endpoint = isAdminDeleting ? `admin/portfolios/${portfolioId}` : `portfolios/${portfolioId}`;
+
+      const response = await fetch(getApiUrl(endpoint), {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -910,8 +913,8 @@ export default function PortfolioDetailClient({
               type="button"
               onClick={handleToggleLike}
               className={`inline-flex min-h-10 items-center gap-2 rounded-lg border px-3 text-sm font-bold transition ${isLiked
-                  ? "border-danger/25 bg-danger/10 text-danger"
-                  : "border-border bg-surface-soft text-muted hover:text-foreground"
+                ? "border-danger/25 bg-danger/10 text-danger"
+                : "border-border bg-surface-soft text-muted hover:text-foreground"
                 }`}
             >
               <Heart
@@ -976,12 +979,11 @@ export default function PortfolioDetailClient({
               <div className="flex items-center gap-3 border-b border-border pb-5">
                 <Link href={`/profile/${portfolio.user._id}`} className="shrink-0">
                   {portfolio.user.avatar && portfolio.user.avatar !== "default-avatar.png" ? (
-                    <Image
+                    <img
                       src={portfolio.user.avatar}
                       alt={portfolio.user.name}
-                      width={56}
-                      height={56}
                       className="h-14 w-14 rounded-full object-cover"
+                      referrerPolicy="no-referrer"
                     />
                   ) : (
                     <span className="grid h-14 w-14 place-items-center rounded-full bg-primary text-lg font-bold text-white">
@@ -1036,21 +1038,23 @@ export default function PortfolioDetailClient({
                 </div>
               )}
 
-              {isOwner && (
+              {(isOwner || currentUser?.role === "admin") && (
                 <div className="mt-6 flex flex-col gap-3 border-t border-border pt-6">
-                  <button
-                    type="button"
-                    onClick={handleStartEditPortfolio}
-                    className="btn btn-outline w-full h-11 flex items-center justify-center gap-2 text-sm font-bold transition-all hover:bg-primary/10 hover:text-primary"
-                  >
-                    <Edit3 className="h-4 w-4" /> Chỉnh sửa tác phẩm
-                  </button>
+                  {isOwner && (
+                    <button
+                      type="button"
+                      onClick={handleStartEditPortfolio}
+                      className="btn btn-outline w-full h-11 flex items-center justify-center gap-2 text-sm font-bold transition-all hover:bg-primary/10 hover:text-primary"
+                    >
+                      <Edit3 className="h-4 w-4" /> Chỉnh sửa tác phẩm
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setShowDeleteConfirm(true)}
                     className="btn btn-outline border-danger text-danger hover:bg-danger/10 hover:text-danger w-full h-11 flex items-center justify-center gap-2 text-sm font-bold transition-all"
                   >
-                    <Trash2 className="h-4 w-4" /> Xóa tác phẩm
+                    <Trash2 className="h-4 w-4" /> {isOwner ? "Xóa tác phẩm" : "Gỡ bỏ tác phẩm (Admin)"}
                   </button>
                 </div>
               )}
@@ -1169,7 +1173,7 @@ export default function PortfolioDetailClient({
             </section>
           </aside>
         </div>
-            </div>
+      </div>
 
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4">

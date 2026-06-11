@@ -4,6 +4,7 @@ import Comment from '~/models/commentModel.js'
 import { ApiError } from '~/utils/ApiError.js'
 import cloudinary from 'cloudinary'
 import mongoose from 'mongoose'
+import Notification from '~/models/notificationModel.js'
 
 const getSystemStats = async () => {
   const totalUsers = await User.countDocuments()
@@ -74,44 +75,118 @@ const changeUserStatus = async (userId, activeStatus) => {
 
 const deletePortfolioByAdmin = async (portfolioId) => {
   const session = await mongoose.startSession()
-  session.startTransaction()
 
   try {
-    const portfolio = await Portfolio.findById(portfolioId).session(session)
-    if (!portfolio) {
-      throw new ApiError(404, 'Không tìm thấy tác phẩm')
-    }
+    await session.withTransaction(async () => {
+      const portfolio = await Portfolio.findById(portfolioId).session(session)
+      if (!portfolio) {
+        throw new ApiError(404, 'Không tìm thấy tác phẩm')
+      }
 
-    // Xóa ảnh trên Cloudinary
-    if (portfolio.images && portfolio.images.length > 0) {
-      for (const imageUrl of portfolio.images) {
-        // Lấy public_id từ URL Cloudinary
-        const urlParts = imageUrl.split('/')
-        const filename = urlParts[urlParts.length - 1]
-        const publicId = `artfolio/portfolios/${filename.split('.')[0]}`
-        
-        try {
-          await cloudinary.v2.uploader.destroy(publicId)
-        } catch (cloudErr) {
-          console.error(`Lỗi xóa ảnh ${publicId} trên Cloudinary:`, cloudErr)
+      // Xóa ảnh trên Cloudinary
+      if (portfolio.images && portfolio.images.length > 0) {
+        for (const imageUrl of portfolio.images) {
+          // Lấy public_id từ URL Cloudinary
+          const urlParts = imageUrl.split('/')
+          const filename = urlParts[urlParts.length - 1]
+          const publicId = `artfolio/portfolios/${filename.split('.')[0]}`
+          
+          try {
+            await cloudinary.v2.uploader.destroy(publicId)
+          } catch (cloudErr) {
+            console.error(`Lỗi xóa ảnh ${publicId} trên Cloudinary:`, cloudErr)
+          }
         }
       }
-    }
 
-    // Xóa tất cả comment của tác phẩm này
-    await Comment.deleteMany({ portfolio: portfolioId }).session(session)
+      // Xóa tất cả comment của tác phẩm này
+      await Comment.deleteMany({ portfolio: portfolioId }).session(session)
 
-    // Cuối cùng xóa tác phẩm
-    await Portfolio.findByIdAndDelete(portfolioId).session(session)
-
-    await session.commitTransaction()
-    session.endSession()
+      // Cuối cùng xóa tác phẩm
+      await Portfolio.findByIdAndDelete(portfolioId).session(session)
+    })
 
     return { message: 'Đã gỡ bỏ tác phẩm vi phạm thành công' }
-  } catch (error) {
-    await session.abortTransaction()
+  } finally {
     session.endSession()
-    throw error
+  }
+}
+
+const deleteUserByAdmin = async (userId) => {
+  const session = await mongoose.startSession()
+
+  try {
+    await session.withTransaction(async () => {
+      const user = await User.findById(userId).session(session)
+      if (!user) {
+        throw new ApiError(404, 'Không tìm thấy người dùng')
+      }
+
+      if (user.role === 'admin') {
+        throw new ApiError(403, 'Không thể xóa tài khoản Admin')
+      }
+
+      // Xóa avatar trên Cloudinary
+      if (user.avatar && !user.avatar.includes('default-avatar')) {
+        const matches = user.avatar.match(/\/upload\/(?:v\d+\/)?(.+)\.[a-z]+$/i)
+        if (matches && matches[1]) {
+          try {
+            await cloudinary.v2.uploader.destroy(matches[1])
+          } catch (err) {
+            console.error(`Lỗi xóa avatar ${matches[1]} trên Cloudinary:`, err)
+          }
+        }
+      }
+
+      // Tìm và xóa tất cả portfolios của user
+      const userPortfolios = await Portfolio.find({ user: userId }).session(session)
+      for (const portfolio of userPortfolios) {
+        // Xóa ảnh portfolio trên Cloudinary
+        if (portfolio.images && portfolio.images.length > 0) {
+          for (const imageUrl of portfolio.images) {
+            const matches = imageUrl.match(/\/upload\/(?:v\d+\/)?(.+)\.[a-z]+$/i)
+            if (matches && matches[1]) {
+              try {
+                await cloudinary.v2.uploader.destroy(matches[1])
+              } catch (cloudErr) {
+                console.error(`Lỗi xóa ảnh ${matches[1]} trên Cloudinary:`, cloudErr)
+              }
+            }
+          }
+        }
+        // Xóa comment của portfolio này
+        await Comment.deleteMany({ portfolio: portfolio._id }).session(session)
+      }
+      // Xóa tất cả portfolios của user
+      await Portfolio.deleteMany({ user: userId }).session(session)
+
+      // Xóa tất cả comments do user viết
+      await Comment.deleteMany({ user: userId }).session(session)
+
+      // Xóa tất cả notifications liên quan (gửi hoặc nhận)
+      await Notification.deleteMany({
+        $or: [{ recipient: userId }, { sender: userId }]
+      }).session(session)
+
+      // Gỡ user khỏi các mảng followers/following của user khác
+      await User.updateMany(
+        { $or: [{ followers: userId }, { following: userId }] },
+        { $pull: { followers: userId, following: userId } }
+      ).session(session)
+
+      // Gỡ user khỏi danh sách likes của các portfolio
+      await Portfolio.updateMany(
+        { likes: userId },
+        { $pull: { likes: userId }, $inc: { likesCount: -1 } }
+      ).session(session)
+
+      // Xóa user record
+      await User.findByIdAndDelete(userId).session(session)
+    })
+
+    return { message: 'Đã xóa tài khoản và dọn dẹp dữ liệu thành công' }
+  } finally {
+    session.endSession()
   }
 }
 
@@ -119,5 +194,6 @@ export const adminService = {
   getSystemStats,
   getAllUsers,
   changeUserStatus,
-  deletePortfolioByAdmin
+  deletePortfolioByAdmin,
+  deleteUserByAdmin
 }

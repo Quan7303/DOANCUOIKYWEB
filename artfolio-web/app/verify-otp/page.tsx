@@ -1,23 +1,67 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+import { useAuthStore } from "../store/useAuthStore";
 import { getApiUrl } from "../utils/apiConfig";
 
 const otpSchema = z.object({
-  otp: z.string().length(6, "Mã OTP phải có đúng 6 ký tự"),
+  otp: z
+    .string()
+    .regex(/^\d{6}$/, "Mã OTP phải gồm đúng 6 chữ số"),
 });
 
 type OtpFormValues = z.infer<typeof otpSchema>;
+
+function getSafeNextPath(value?: string | null) {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) {
+    return "/dashboard";
+  }
+
+  return value;
+}
+
+async function requestResetOtpCheck(email: string, otp: string) {
+  const res = await fetch(getApiUrl("auth/verify-otp"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, otp }),
+  });
+
+  const data = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    throw new Error(data?.message || "Mã OTP không chính xác hoặc đã hết hạn.");
+  }
+}
+
+async function resendResetOtp(email: string) {
+  const res = await fetch(getApiUrl("auth/forgot-password"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+
+  const data = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    throw new Error(data?.message || "Không thể gửi lại mã OTP.");
+  }
+
+  return data?.message as string | undefined;
+}
 
 function VerifyOtpContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const email = searchParams.get("email") || "";
+  const mode = searchParams.get("mode") === "reset" ? "reset" : "signup";
+  const nextPath = getSafeNextPath(searchParams.get("next"));
+  const { verifySignupOtp, resendSignupOtp } = useAuthStore();
 
   const [apiError, setApiError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -30,6 +74,7 @@ function VerifyOtpContent() {
     formState: { errors },
   } = useForm<OtpFormValues>({
     resolver: zodResolver(otpSchema),
+    mode: "onBlur",
   });
 
   const onSubmit = async (values: OtpFormValues) => {
@@ -38,22 +83,16 @@ function VerifyOtpContent() {
     setSuccessMessage("");
 
     try {
-      const res = await fetch(getApiUrl("auth/verify-otp"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, otp: values.otp }),
-      });
-
-      const data = await res.json().catch(() => null);
-
-      if (!res.ok) {
-        throw new Error(data?.message || "Mã OTP không chính xác hoặc đã hết hạn.");
+      if (mode === "reset") {
+        await requestResetOtpCheck(email, values.otp);
+        router.push(
+          `/reset-password?email=${encodeURIComponent(email)}&otp=${encodeURIComponent(values.otp)}`,
+        );
+        return;
       }
 
-      // Chuyển hướng sang trang đặt lại mật khẩu kèm email và otp
-      router.push(
-        `/reset-password?email=${encodeURIComponent(email)}&otp=${encodeURIComponent(values.otp)}`
-      );
+      await verifySignupOtp({ email, otp: values.otp });
+      router.replace(nextPath);
     } catch (err) {
       setApiError(err instanceof Error ? err.message : "Đã xảy ra lỗi.");
     } finally {
@@ -63,24 +102,18 @@ function VerifyOtpContent() {
 
   const handleResendOtp = async () => {
     if (!email) return;
+
     setIsResending(true);
     setApiError("");
     setSuccessMessage("");
 
     try {
-      const res = await fetch(getApiUrl("auth/forgot-password"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
+      const message =
+        mode === "reset"
+          ? await resendResetOtp(email)
+          : await resendSignupOtp(email);
 
-      const data = await res.json().catch(() => null);
-
-      if (!res.ok) {
-        throw new Error(data?.message || "Không thể gửi lại mã OTP.");
-      }
-
-      setSuccessMessage("Đã gửi lại mã OTP mới vào email của bạn.");
+      setSuccessMessage(message || "Đã gửi lại mã OTP vào email của bạn.");
     } catch (err) {
       setApiError(err instanceof Error ? err.message : "Đã xảy ra lỗi.");
     } finally {
@@ -88,15 +121,28 @@ function VerifyOtpContent() {
     }
   };
 
+  const title =
+    mode === "reset" ? "Xác thực khôi phục mật khẩu" : "Xác thực đăng ký";
+
   return (
     <div className="surface w-full max-w-md rounded-lg p-5 sm:p-7">
       <div className="mb-6">
         <p className="text-sm font-bold uppercase text-primary">Artfolio</p>
-        <h1 className="mt-2 text-2xl font-bold">Xác thực OTP</h1>
+        <h1 className="mt-2 text-2xl font-bold">{title}</h1>
         <p className="mt-1 text-sm text-muted">
-          Nhập mã OTP gồm 6 chữ số đã được gửi đến <span className="font-semibold text-foreground">{email}</span>.
+          Nhập mã OTP 6 số đã được gửi đến{" "}
+          <span className="font-semibold text-foreground">
+            {email || "email của bạn"}
+          </span>
+          .
         </p>
       </div>
+
+      {!email && (
+        <div className="mb-4 rounded-lg border border-danger bg-surface p-3 text-sm font-semibold text-danger">
+          Thiếu email xác thực. Vui lòng quay lại trang đăng ký.
+        </div>
+      )}
 
       {apiError && (
         <div className="mb-4 rounded-lg border border-danger bg-surface p-3 text-sm font-semibold text-danger">
@@ -115,10 +161,12 @@ function VerifyOtpContent() {
           <span className="label">Mã OTP</span>
           <input
             id="otp-code"
-            className={`input text-center text-lg tracking-[0.5em] font-mono${
+            className={`input text-center font-mono text-lg tracking-[0.4em]${
               errors.otp ? " input-error" : ""
             }`}
             type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
             maxLength={6}
             placeholder="000000"
             {...register("otp")}
@@ -136,7 +184,7 @@ function VerifyOtpContent() {
         </button>
       </form>
 
-      <div className="mt-5 flex items-center justify-between text-sm text-muted">
+      <div className="mt-5 flex items-center justify-between gap-3 text-sm text-muted">
         <button
           type="button"
           onClick={handleResendOtp}
@@ -145,8 +193,8 @@ function VerifyOtpContent() {
         >
           {isResending ? "Đang gửi..." : "Gửi lại OTP"}
         </button>
-        <Link href="/login" className="font-bold text-primary">
-          Quay lại Đăng nhập
+        <Link href={mode === "reset" ? "/forgot-password" : "/signup"} className="font-bold text-primary">
+          Quay lại
         </Link>
       </div>
     </div>
