@@ -47,6 +47,10 @@ function isActive(
     );
   }
 
+  if (href === "/for-you") {
+    return pathname === "/for-you";
+  }
+
   if (href === "/create") {
     return pathname === "/create";
   }
@@ -150,6 +154,11 @@ export default function Navbar() {
               {link.label}
             </Link>
           ))}
+          {signedIn && (
+            <Link href="/for-you" className={linkClass("/for-you")}>
+              Dành cho bạn
+            </Link>
+          )}
           <a
             href={createHref}
             className={linkClass("/create")}
@@ -267,6 +276,15 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
+            {signedIn && (
+              <Link
+                href="/for-you"
+                className={linkClass("/for-you")}
+                onClick={() => setIsOpen(false)}
+              >
+                Dành cho bạn
+              </Link>
+            )}
             <a
               href={createHref}
               className={linkClass("/create")}

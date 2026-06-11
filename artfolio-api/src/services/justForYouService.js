@@ -3,16 +3,10 @@ import Portfolio from '~/models/portfolioModel.js'
 import User from '~/models/userModel.js'
 import { ApiError } from '~/utils/ApiError.js'
 
-/**
- * Lấy danh sách tag từ những bài mà user đã tym (like).
- * Trả về mảng tag được sắp xếp theo tần suất xuất hiện (phổ biến nhất trước).
- */
-const getLikedTags = async (userId) => {
-  const likedPortfolios = await Portfolio.find(
-    { likes: userId },
-    { tags: 1 }
-  ).lean()
+const MIN_FEED_SIZE = 8
 
+const getLikedTags = async (userId) => {
+  const likedPortfolios = await Portfolio.find({ likes: userId }, { tags: 1 }).lean()
   const tagFrequency = {}
   for (const portfolio of likedPortfolios) {
     for (const tag of portfolio.tags || []) {
@@ -20,106 +14,158 @@ const getLikedTags = async (userId) => {
       tagFrequency[normalizedTag] = (tagFrequency[normalizedTag] || 0) + 1
     }
   }
-
-  // Sắp xếp theo tần suất giảm dần, lấy tối đa 20 tag tiêu biểu nhất
   return Object.entries(tagFrequency)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 20)
     .map(([tag]) => tag)
 }
 
+/** Lookup pipeline tái sử dụng: populate user.name + user.avatar */
+const userLookup = {
+  $lookup: {
+    from: 'users',
+    localField: 'user',
+    foreignField: '_id',
+    as: 'user',
+    pipeline: [{ $project: { name: 1, avatar: 1 } }]
+  }
+}
+
 /**
- * "Just For You" – gợi ý bài viết cá nhân hoá cho user dựa trên:
- *   1. Bài của những người user đang follow
- *   2. Bài có tag tương tự những bài user đã tym
+ * "Dành cho bạn" feed — trả về 3 sections riêng biệt:
+ *   1. followingPosts  — bài mới nhất từ những người đang follow
+ *   2. tagPosts        — bài cùng tag với những bài đã tym (loại trừ bài đã có ở trên)
+ *   3. randomPosts     — bổ sung ngẫu nhiên nếu tổng 2 nguồn trên < MIN_FEED_SIZE
  *
- * Hai nguồn được hợp nhất, khử trùng và sắp xếp theo điểm liên quan,
- * sau đó phân trang.
- *
- * @param {string} userId   - ID của user đang đăng nhập
- * @param {object} query    - { page, limit }
+ * Cũng trả về danh sách followingUsers (avatar + tên) để hiển thị section "Đang theo dõi".
  */
 const getJustForYouFeed = async (userId, query = {}) => {
-  const page = Math.max(parseInt(query.page) || 1, 1)
+  const page  = Math.max(parseInt(query.page)  || 1,  1)
   const limit = Math.min(parseInt(query.limit) || 12, 50)
-  const skip = (page - 1) * limit
 
-  // 1. Lấy danh sách following của user
   const currentUser = await User.findById(userId).select('following').lean()
-  if (!currentUser) {
-    throw new ApiError(404, 'Không tìm thấy người dùng')
-  }
+  if (!currentUser) throw new ApiError(404, 'Không tìm thấy người dùng')
 
   const followingIds = currentUser.following || []
-
-  // Nếu user chưa follow ai → trả về rỗng
-  if (followingIds.length === 0) {
-    return {
-      results: 0,
-      totalCount: 0,
-      totalPages: 0,
-      currentPage: page,
-      data: [],
-      meta: {
-        followingCount: 0
-      }
-    }
-  }
-
-  // Không hiển thị bài của chính user trong feed (tuy rằng user không follow chính mình, nhưng cứ cẩn thận)
   const userObjectId = new mongoose.Types.ObjectId(userId)
-  const followingObjectIds = followingIds.map(
-    (id) => new mongoose.Types.ObjectId(id.toString())
-  )
 
-  const baseQuery = {
-    user: { $in: followingObjectIds, $ne: userObjectId }
+  // ── Section 1: bài từ người đang follow ──────────────────────────────────
+  let followingPosts = []
+  let followingUsers = []
+
+  if (followingIds.length > 0) {
+    const followingObjectIds = followingIds.map(id => new mongoose.Types.ObjectId(id.toString()))
+
+    // Lấy thông tin người follow (avatar + name)
+    followingUsers = await User.find(
+      { _id: { $in: followingObjectIds } },
+      { name: 1, avatar: 1 }
+    ).lean()
+
+    // Bài của người follow, mới nhất trước
+    const followingRaw = await Portfolio.aggregate([
+      { $match: { user: { $in: followingObjectIds, $ne: userObjectId } } },
+      { $sort: { createdAt: -1 } },
+      { $limit: Math.max(limit, 20) },
+      userLookup,
+      { $unwind: '$user' }
+    ])
+
+    followingPosts = followingRaw
   }
 
-  // 5. Aggregation pipeline:
-  //    - Chỉ cần sort theo thời gian tạo mới nhất
-  //    - Phân trang với $facet
-  const pipeline = [
-    { $match: baseQuery },
-    { $sort: { createdAt: -1 } },
-    {
-      $facet: {
-        data: [
-          { $skip: skip },
-          { $limit: limit },
-          {
-            $lookup: {
-              from: 'users',
-              localField: 'user',
-              foreignField: '_id',
-              as: 'user',
-              pipeline: [{ $project: { name: 1, avatar: 1 } }]
+  // ── Section 2: bài cùng tag với bài đã tym ───────────────────────────────
+  let tagPosts = []
+  const likedTags = await getLikedTags(userId)
+
+  if (likedTags.length > 0) {
+    const existingIds = new Set(followingPosts.map(p => p._id.toString()))
+
+    const tagRaw = await Portfolio.aggregate([
+      {
+        $match: {
+          user: { $ne: userObjectId },
+          tags: { $in: likedTags },
+          // Loại trừ bài đã có trong section following
+          _id: { $nin: [...existingIds].map(id => new mongoose.Types.ObjectId(id)) }
+        }
+      },
+      // Tính điểm relevance: số tag khớp càng nhiều càng lên đầu
+      {
+        $addFields: {
+          relevanceScore: {
+            $size: {
+              $ifNull: [
+                { $filter: { input: '$tags', as: 't', cond: { $in: ['$$t', likedTags] } } },
+                []
+              ]
             }
-          },
-          { $unwind: '$user' }
-        ],
-        totalCount: [{ $count: 'count' }]
-      }
-    }
-  ]
+          }
+        }
+      },
+      { $sort: { relevanceScore: -1, createdAt: -1 } },
+      { $limit: Math.max(limit, 20) },
+      userLookup,
+      { $unwind: '$user' }
+    ])
 
-  const [aggregationResult] = await Portfolio.aggregate(pipeline)
+    tagPosts = tagRaw
+  }
 
-  const portfolios = aggregationResult?.data || []
-  const totalCount = aggregationResult?.totalCount?.[0]?.count || 0
+  // ── Section 3: fallback random nếu tổng < MIN_FEED_SIZE ─────────────────
+  let randomPosts = []
+  const totalSoFar = followingPosts.length + tagPosts.length
+
+  if (totalSoFar < MIN_FEED_SIZE) {
+    const allExcludeIds = [
+      ...followingPosts.map(p => p._id),
+      ...tagPosts.map(p => p._id)
+    ]
+
+    const needed = MIN_FEED_SIZE - totalSoFar + 4 // lấy dư một chút
+    const randomRaw = await Portfolio.aggregate([
+      {
+        $match: {
+          user: { $ne: userObjectId },
+          _id: { $nin: allExcludeIds }
+        }
+      },
+      { $sample: { size: needed } },
+      userLookup,
+      { $unwind: '$user' }
+    ])
+
+    randomPosts = randomRaw
+  }
+
+  // ── Phân trang trên combined feed (following + tag) ───────────────────────
+  const combinedAll = [...followingPosts, ...tagPosts]
+  const totalCount = combinedAll.length
+  const skip = (page - 1) * limit
+  const pagedData = combinedAll.slice(skip, skip + limit)
 
   return {
-    results: portfolios.length,
+    results: pagedData.length,
     totalCount,
     totalPages: Math.ceil(totalCount / limit),
     currentPage: page,
-    data: portfolios,
+    data: pagedData,
+
+    // Sections riêng biệt cho trang /for-you
+    sections: {
+      followingPosts: followingPosts.slice(0, 12),
+      tagPosts:       tagPosts.slice(0, 12),
+      randomPosts,
+      likedTags:      likedTags.slice(0, 10),
+      followingUsers
+    },
+
     meta: {
-      followingCount: followingIds.length
+      followingCount: followingIds.length,
+      likedTagCount:  likedTags.length,
+      hasRandom:      randomPosts.length > 0
     }
   }
 }
 
-export const justForYouService = {
-  getJustForYouFeed
-}
+export const justForYouService = { getJustForYouFeed }

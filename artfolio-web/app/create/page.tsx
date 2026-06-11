@@ -19,50 +19,6 @@ const createSchema = z.object({
 
 type CreateFormValues = z.infer<typeof createSchema>;
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
-const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
-
-function hslToHex(hue: number, saturation: number, lightness: number) {
-  const normalizedSaturation = saturation / 100;
-  const normalizedLightness = lightness / 100;
-  const chroma =
-    (1 - Math.abs(2 * normalizedLightness - 1)) * normalizedSaturation;
-  const hueSegment = hue / 60;
-  const secondComponent = chroma * (1 - Math.abs((hueSegment % 2) - 1));
-  const match = normalizedLightness - chroma / 2;
-  const [red, green, blue] =
-    hueSegment < 1
-      ? [chroma, secondComponent, 0]
-      : hueSegment < 2
-        ? [secondComponent, chroma, 0]
-        : hueSegment < 3
-          ? [0, chroma, secondComponent]
-          : hueSegment < 4
-            ? [0, secondComponent, chroma]
-            : hueSegment < 5
-              ? [secondComponent, 0, chroma]
-              : [chroma, 0, secondComponent];
-
-  return `#${[red, green, blue]
-    .map((value) =>
-      Math.round((value + match) * 255)
-        .toString(16)
-        .padStart(2, "0"),
-    )
-    .join("")}`;
-}
-
-const COLOR_PALETTE = [
-  ...[0, 15, 30, 45, 60, 85, 110, 140, 165, 190, 215, 240, 265, 290, 315, 340]
-    .flatMap((hue) => [82, 68, 54, 40, 28].map((lightness) => hslToHex(hue, 86, lightness))),
-  "#ffffff",
-  "#f1f5f9",
-  "#cbd5e1",
-  "#94a3b8",
-  "#64748b",
-  "#334155",
-  "#111827",
-  "#000000",
-];
 
 export default function CreatePortfolioPage() {
   const router = useRouter();
@@ -70,8 +26,6 @@ export default function CreatePortfolioPage() {
 
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
-  const [colors, setColors] = useState<string[]>(["#0f172a", "#3b82f6", "#f472b6"]);
-  const [activeColorIndex, setActiveColorIndex] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [apiError, setApiError] = useState("");
   const imagePreviewsRef = useRef<string[]>([]);
@@ -162,21 +116,6 @@ export default function CreatePortfolioPage() {
     }
   };
 
-  const handleColorChange = (index: number, newColor: string) => {
-    const newColors = [...colors];
-    const normalizedColor = newColor.startsWith("#")
-      ? newColor
-      : `#${newColor}`;
-    newColors[index] = normalizedColor.slice(0, 7);
-    setColors(newColors);
-  };
-
-  const applyPresetColor = (color: string) => {
-    handleColorChange(activeColorIndex, color);
-  };
-
-  const validColors = colors.filter((color) => HEX_COLOR_PATTERN.test(color));
-
   const analyzeImageWithAI = async () => {
     if (imageFiles.length === 0) {
       setAiError("chưa thêm ảnh");
@@ -190,7 +129,6 @@ export default function CreatePortfolioPage() {
     setAiSuggestedDescription("");
 
     try {
-      // Convert ảnh được chọn sang base64
       const file = imageFiles[selectedImageIndex];
       const base64Data = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
@@ -240,7 +178,6 @@ export default function CreatePortfolioPage() {
     setAiSuggestedDescription("");
 
     try {
-      // Convert tất cả ảnh sang base64
       const imagesData = await Promise.all(
         imageFiles.map(async (file) => {
           const base64Data = await new Promise<string>((resolve, reject) => {
@@ -304,13 +241,11 @@ export default function CreatePortfolioPage() {
       formData.append("description", values.description || "");
       formData.append("category", values.category);
 
-      // Parse tags từ string (comma separated)
       if (values.tags) {
         const tagArray = values.tags.split(",").map(t => t.trim()).filter(Boolean);
-        tagArray.forEach(t => formData.append("tags", t)); // Gửi mảng tags
+        tagArray.forEach(t => formData.append("tags", t));
       }
 
-      // File ảnh
       imageFiles.forEach(file => {
         formData.append("images", file);
       });
@@ -425,62 +360,6 @@ export default function CreatePortfolioPage() {
               />
               {errors.description && <span className="error-text">{errors.description.message}</span>}
             </label>
-
-            {/* Bảng Màu */}
-            <div className="surface mt-4 rounded-xl p-5 border-primary/20 bg-primary/5">
-              <div className="flex items-center justify-between mb-4">
-                <span className="label text-primary">Bảng màu chủ đạo</span>
-              </div>
-              <div className="grid gap-3">
-                {colors.map((c, i) => {
-                  const isValid = HEX_COLOR_PATTERN.test(c);
-
-                  return (
-                    <label
-                      key={i}
-                      className={`flex items-center gap-3 rounded-lg border bg-surface p-2 transition ${activeColorIndex === i
-                        ? "border-primary ring-2 ring-primary/20"
-                        : "border-border"
-                        }`}
-                      onFocus={() => setActiveColorIndex(i)}
-                    >
-                      <span
-                        className="h-9 w-9 shrink-0 rounded-md border border-border"
-                        style={{ backgroundColor: isValid ? c : "#ffffff" }}
-                      />
-                      <input
-                        className={`min-w-0 flex-1 bg-transparent text-sm font-semibold uppercase outline-none ${isValid ? "text-foreground" : "text-danger"
-                          }`}
-                        value={c}
-                        maxLength={7}
-                        onChange={(e) => handleColorChange(i, e.target.value)}
-                        onFocus={() => setActiveColorIndex(i)}
-                        aria-label={`Color ${i + 1}`}
-                      />
-                    </label>
-                  );
-                })}
-
-                <div className="grid grid-cols-8 gap-1 rounded-lg border border-border bg-surface p-2 sm:grid-cols-11">
-                  {COLOR_PALETTE.map((preset) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      className={`aspect-square rounded-sm border transition hover:scale-110 focus:outline-none focus:ring-2 focus:ring-primary/40 ${colors[activeColorIndex]?.toLowerCase() ===
-                        preset.toLowerCase()
-                        ? "border-foreground ring-2 ring-primary/40"
-                        : "border-border/50"
-                        }`}
-                      style={{ backgroundColor: preset }}
-                      onClick={() => applyPresetColor(preset)}
-                      aria-label={`Use color ${preset}`}
-                      title={preset}
-                    />
-                  ))}
-                </div>
-              </div>
-              {/* end color grid */}
-            </div>
           </div>
 
           {/* Cột Phải: Upload File */}
@@ -551,7 +430,7 @@ export default function CreatePortfolioPage() {
             {/* AI Phân Tích Ảnh */}
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-5">
               <div className="flex items-center justify-between mb-3">
-                <span className="label text-primary">AI Gợi Ý Tiêu Đề, Tags & Mô Tả ✨</span>
+                <span className="label text-primary">AI Gợi Ý Tiêu Đề, Tags & Mô Tả</span>
                 <div className="flex gap-2">
                   {imageFiles.length > 1 && (
                     <button
