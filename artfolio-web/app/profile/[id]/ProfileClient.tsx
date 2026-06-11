@@ -302,6 +302,7 @@ export default function ProfileClient({ userId }: ProfileClientProps) {
                       title: p.title,
                       category: p.category,
                       description: p.description,
+                      image: p.images?.[0] || "/next.svg",
                     })),
                   }}
                 />

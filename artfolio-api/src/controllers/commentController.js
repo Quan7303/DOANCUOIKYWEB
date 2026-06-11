@@ -70,7 +70,12 @@ const createComment = async (req, res, next) => {
       })
 
       if (io) {
-        emitNotification(io, ownerId, 'comment', req.user.name || 'Ai đó', portfolio.title, portfolioId)
+        const sender = {
+          _id: req.user._id,
+          name: req.user.name || 'Ai đó',
+          avatar: req.user.avatar
+        }
+        emitNotification(io, ownerId, 'comment', sender, portfolio.title, portfolioId)
       }
     }
 

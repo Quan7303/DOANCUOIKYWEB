@@ -1,10 +1,10 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
+import { Camera, Loader2 } from "lucide-react";
 import ExportPdfButton from "../components/ExportPdfButton";
 import ProfileHeader from "./components/ProfileHeader";
 import DashboardStats from "./components/DashboardStats";
@@ -154,35 +154,35 @@ export default function DashboardClient({
   }, [myPortfolios, deletedPortfolioIds, likeOverrides]);
 
   useEffect(() => {
-  function handlePortfolioLikeChanged(event: Event) {
-    const customEvent = event as CustomEvent<{
-      portfolioId?: string;
-      likesCount?: number;
-    }>;
+    function handlePortfolioLikeChanged(event: Event) {
+      const customEvent = event as CustomEvent<{
+        portfolioId?: string;
+        likesCount?: number;
+      }>;
 
-    const portfolioId = customEvent.detail?.portfolioId;
-    const likesCount = customEvent.detail?.likesCount;
+      const portfolioId = customEvent.detail?.portfolioId;
+      const likesCount = customEvent.detail?.likesCount;
 
-    if (!portfolioId || typeof likesCount !== "number") return;
+      if (!portfolioId || typeof likesCount !== "number") return;
 
-    setLikeOverrides((current) => ({
-      ...current,
-      [portfolioId]: likesCount,
-    }));
-  }
+      setLikeOverrides((current) => ({
+        ...current,
+        [portfolioId]: likesCount,
+      }));
+    }
 
-  window.addEventListener(
-    "artfolio:portfolio-like-changed",
-    handlePortfolioLikeChanged,
-  );
-
-  return () => {
-    window.removeEventListener(
+    window.addEventListener(
       "artfolio:portfolio-like-changed",
       handlePortfolioLikeChanged,
     );
-  };
-}, []);
+
+    return () => {
+      window.removeEventListener(
+        "artfolio:portfolio-like-changed",
+        handlePortfolioLikeChanged,
+      );
+    };
+  }, []);
 
   const [submitResult, setSubmitResult] = useState<{
     ok: boolean;
@@ -190,6 +190,37 @@ export default function DashboardClient({
   } | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  function handleAvatarFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAvatarPreview(URL.createObjectURL(file));
+  }
+
+  async function handleAvatarUpload() {
+    const file = avatarInputRef.current?.files?.[0];
+    if (!file) return;
+    setIsUploadingAvatar(true);
+    try {
+      const formData = new FormData();
+      formData.append("avatar", file);
+      await api.patch(`/api/users/${user._id || user.id}/avatar`, formData);
+      await fetchMe();
+      setSubmitResult({ ok: true, message: "Cập nhật ảnh đại diện thành công." });
+      setAvatarPreview(null);
+      if (avatarInputRef.current) avatarInputRef.current.value = "";
+    } catch (error) {
+      setSubmitResult({
+        ok: false,
+        message: error instanceof Error ? error.message : "Không thể tải ảnh lên.",
+      });
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  }
 
   function handleChangeTab(tab: DashboardTab) {
     router.replace(`/dashboard?tab=${tab}`, { scroll: false });
@@ -334,13 +365,11 @@ export default function DashboardClient({
             {activeTab === "profile" && (
               <div className="surface grid gap-4 rounded-lg p-5">
                 {user.avatar && user.avatar !== "default-avatar.png" ? (
-                  <Image
+                  <img
                     src={user.avatar}
                     alt={user.name}
-                    width={72}
-                    height={72}
-                    sizes="72px"
-                    className="rounded-full object-cover"
+                    className="h-[72px] w-[72px] rounded-full object-cover"
+                    referrerPolicy="no-referrer"
                   />
                 ) : (
                   <div className="grid h-[72px] w-[72px] place-items-center rounded-full bg-primary text-2xl font-bold text-white">
@@ -385,11 +414,10 @@ export default function DashboardClient({
                 <button
                   key={tab.key}
                   type="button"
-                  className={`block w-full px-4 py-3 text-left text-sm font-semibold transition ${
-                    activeTab === tab.key
+                  className={`block w-full px-4 py-3 text-left text-sm font-semibold transition ${activeTab === tab.key
                       ? "bg-primary text-white"
                       : "text-muted hover:bg-surface-soft hover:text-foreground"
-                  }`}
+                    }`}
                   onClick={() => handleChangeTab(tab.key)}
                 >
                   {tab.label}
@@ -401,10 +429,7 @@ export default function DashboardClient({
           <div className="grid min-w-0 gap-5">
             {activeTab === "profile" && (
               <>
-                <ProfileHeader
-                  user={user}
-                  onEditProfile={() => handleChangeTab("profile")}
-                />
+                <ProfileHeader user={user} />
 
                 <DashboardStats
                   portfoliosCount={portfolios.length}
@@ -421,11 +446,10 @@ export default function DashboardClient({
 
                 {submitResult && (
                   <div
-                    className={`mb-5 rounded-lg border p-3 text-sm font-semibold ${
-                      submitResult.ok
+                    className={`mb-5 rounded-lg border p-3 text-sm font-semibold ${submitResult.ok
                         ? "border-border bg-surface-soft text-foreground"
                         : "border-danger bg-surface text-danger"
-                    }`}
+                      }`}
                   >
                     {submitResult.message}
                   </div>
@@ -437,6 +461,64 @@ export default function DashboardClient({
                   onSubmit={handleSubmit(onSubmit)}
                 >
                   <input type="hidden" {...register("userId")} />
+
+                  {/* Avatar Upload */}
+                  <div className="field">
+                    <span className="label">Ảnh đại diện</span>
+                    <div className="flex items-center gap-5">
+                      <div className="relative shrink-0">
+                        {(avatarPreview || (user.avatar && user.avatar !== "default-avatar.png")) ? (
+                          <img
+                            src={avatarPreview || user.avatar!}
+                            alt={user.name}
+                            className="h-20 w-20 rounded-full object-cover border-2 border-border"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <div className="h-20 w-20 rounded-full bg-primary/10 text-primary flex items-center justify-center text-2xl font-bold border-2 border-border">
+                            {user.name.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => avatarInputRef.current?.click()}
+                          className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full bg-primary text-white shadow-md hover:bg-primary/90 transition"
+                          title="Thay đổi ảnh"
+                        >
+                          <Camera className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      <div className="grid gap-2">
+                        <input
+                          ref={avatarInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleAvatarFileChange}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => avatarInputRef.current?.click()}
+                          className="btn btn-secondary btn-sm"
+                        >
+                          Chọn ảnh
+                        </button>
+                        {avatarPreview && (
+                          <button
+                            type="button"
+                            onClick={handleAvatarUpload}
+                            disabled={isUploadingAvatar}
+                            className="btn btn-primary btn-sm flex items-center gap-1.5"
+                          >
+                            {isUploadingAvatar ? (
+                              <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang tải lên...</>
+                            ) : "Lưu ảnh mới"}
+                          </button>
+                        )}
+                        <span className="text-xs text-muted">JPG, PNG, WEBP. Tối đa 10MB.</span>
+                      </div>
+                    </div>
+                  </div>
 
                   <label className="field">
                     <span className="label">Họ tên</span>
@@ -466,9 +548,8 @@ export default function DashboardClient({
                     <span className="label">Giới thiệu bản thân</span>
                     <textarea
                       rows={4}
-                      className={`input h-auto py-2.5 leading-relaxed${
-                        errors.portfolioDescription ? " input-error" : ""
-                      }`}
+                      className={`input h-auto py-2.5 leading-relaxed${errors.portfolioDescription ? " input-error" : ""
+                        }`}
                       placeholder="Mô tả ngắn về bản thân, phong cách sáng tạo hoặc định hướng portfolio..."
                       {...register("portfolioDescription")}
                     />
@@ -497,9 +578,8 @@ export default function DashboardClient({
                     <span className="label">Kinh nghiệm</span>
                     <textarea
                       rows={4}
-                      className={`input h-auto py-2.5 leading-relaxed${
-                        errors.experience ? " input-error" : ""
-                      }`}
+                      className={`input h-auto py-2.5 leading-relaxed${errors.experience ? " input-error" : ""
+                        }`}
                       placeholder="Mô tả ngắn kinh nghiệm làm việc..."
                       {...register("experience")}
                     />

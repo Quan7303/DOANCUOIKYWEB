@@ -9,7 +9,7 @@ const validCategories: PortfolioCategory[] = [
   "other",
 ];
 
-type RawPortfolio = Partial<PortfolioSummary> & {
+export type RawPortfolio = Partial<PortfolioSummary> & {
   _id?: string;
   id?: string;
   images?: unknown;
@@ -38,7 +38,7 @@ function normalizeStringArray(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === "string");
 }
 
-function normalizePortfolio(item: RawPortfolio): PortfolioSummary {
+export function normalizePortfolio(item: RawPortfolio): PortfolioSummary {
   return {
     _id: item._id || item.id || crypto.randomUUID(),
     title: item.title || "Untitled portfolio",

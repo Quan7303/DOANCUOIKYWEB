@@ -1,6 +1,10 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  GoogleLogin,
+  type CredentialResponse,
+} from "@react-oauth/google";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -18,7 +22,6 @@ function getSafeNextPath(value?: string) {
   if (!value || !value.startsWith("/") || value.startsWith("//")) {
     return "/dashboard";
   }
-
   return value;
 }
 
@@ -28,7 +31,7 @@ export default function LoginPage({
   nextPath,
 }: LoginPageProps) {
   const router = useRouter();
-  const { login, isAuthenticated } = useAuthStore();
+  const { login, googleLogin, isAuthenticated } = useAuthStore();
   const redirectPath = getSafeNextPath(nextPath);
   const signupHref =
     redirectPath === "/dashboard"
@@ -36,6 +39,7 @@ export default function LoginPage({
       : `/signup?next=${encodeURIComponent(redirectPath)}`;
   const [apiError, setApiError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) router.replace(redirectPath);
@@ -53,14 +57,32 @@ export default function LoginPage({
   const onSubmit = async (values: LoginFormValues) => {
     setIsSubmitting(true);
     setApiError("");
-
     try {
       await login(values.email, values.password);
       router.replace(redirectPath);
     } catch (err) {
-      setApiError(err instanceof Error ? err.message : "Dang nhap that bai.");
+      setApiError(err instanceof Error ? err.message : "Đăng nhập thất bại.");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleGoogleSuccess = async (credentialResponse: CredentialResponse) => {
+    if (!credentialResponse.credential) {
+      setApiError("Không nhận được mã xác thực từ Google.");
+      return;
+    }
+    setIsGoogleSubmitting(true);
+    setApiError("");
+    try {
+      await googleLogin(credentialResponse.credential);
+      router.replace(redirectPath);
+    } catch (err) {
+      setApiError(
+        err instanceof Error ? err.message : "Đăng nhập Google thất bại.",
+      );
+    } finally {
+      setIsGoogleSubmitting(false);
     }
   };
 
@@ -70,7 +92,7 @@ export default function LoginPage({
         <div className="surface w-full max-w-md rounded-lg p-5 sm:p-7">
           <div className="mb-6">
             <p className="text-sm font-bold uppercase text-primary">Artfolio</p>
-            <h1 className="mt-2 text-2xl font-bold">Dang nhap</h1>
+            <h1 className="mt-2 text-2xl font-bold">Đăng nhập</h1>
           </div>
 
           {apiError && (
@@ -81,13 +103,13 @@ export default function LoginPage({
 
           {registered && !apiError && (
             <div className="mb-4 rounded-lg border border-border bg-surface-soft p-3 text-sm font-semibold text-foreground">
-              Dang ky thanh cong. Vui long dang nhap de tiep tuc.
+              Đăng ký thành công. Vui lòng nhập OTP trong email để kích hoạt.
             </div>
           )}
 
           {resetSuccess && !apiError && (
             <div className="mb-4 rounded-lg border border-primary/30 bg-primary/10 p-3 text-sm font-semibold text-primary">
-              Đặt lại mật khẩu thành công. Vui lòng đăng nhập với mật khẩu mới.
+              Đặt lại mật khẩu thành công. Vui lòng đăng nhập bằng mật khẩu mới.
             </div>
           )}
 
@@ -120,7 +142,7 @@ export default function LoginPage({
                 className={`input${errors.password ? " input-error" : ""}`}
                 type="password"
                 autoComplete="current-password"
-                placeholder="Mat khau"
+                placeholder="Mật khẩu"
                 {...register("password")}
               />
               {errors.password && <span className="error-text">{errors.password.message}</span>}
@@ -130,16 +152,39 @@ export default function LoginPage({
               id="login-submit"
               type="submit"
               className="btn btn-primary mt-2 w-full"
-              disabled={isSubmitting}
+              disabled={isSubmitting || isGoogleSubmitting}
             >
-              {isSubmitting ? "Dang dang nhap..." : "Dang nhap"}
+              {isSubmitting ? "Đang đăng nhập..." : "Đăng nhập"}
             </button>
           </form>
 
+          <div className="my-5 flex items-center gap-3 text-xs font-semibold uppercase text-muted">
+            <span className="h-px flex-1 bg-border" />
+            <span>Hoặc</span>
+            <span className="h-px flex-1 bg-border" />
+          </div>
+
+          <div className="grid place-items-center">
+            <GoogleLogin
+              onSuccess={handleGoogleSuccess}
+              onError={() => setApiError("Đăng nhập Google thất bại.")}
+              theme="outline"
+              size="large"
+              text="signin_with"
+              shape="rectangular"
+              width="360"
+            />
+            {isGoogleSubmitting && (
+              <p className="mt-2 text-sm font-semibold text-muted">
+                Đang đăng nhập Google...
+              </p>
+            )}
+          </div>
+
           <p className="mt-5 text-center text-sm text-muted">
-            Chua co tai khoan?{" "}
+            Chưa có tài khoản?{" "}
             <Link href={signupHref} className="font-bold text-primary">
-              Dang ky
+              Đăng ký
             </Link>
           </p>
         </div>

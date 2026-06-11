@@ -48,6 +48,118 @@ const generateWithFallback = async (prompt) => {
   throw lastError
 }
 
+export const analyzeMultipleImages = async (req, res) => {
+  try {
+    const { images } = req.body
+
+    if (!images || !Array.isArray(images) || images.length === 0) {
+      return res.status(400).json({ status: 'error', message: 'Vui lòng cung cấp ít nhất 1 ảnh' })
+    }
+
+    const imageParts = images.slice(0, 5).map(({ imageBase64, mimeType }) => ({
+      inlineData: { data: imageBase64, mimeType }
+    }))
+
+    let lastError
+    for (const modelName of MODELS) {
+      try {
+        console.log(`Thử model vision (all): ${modelName}`)
+        const model = genAI.getGenerativeModel({ model: modelName })
+
+        const result = await model.generateContent([
+          ...imageParts,
+          `Bạn là chuyên gia thiết kế nghệ thuật. Hãy xem tất cả ${imageParts.length} ảnh trên (đây là các ảnh của cùng 1 tác phẩm/bộ sưu tập) và đề xuất 1 tiêu đề + tags chung phù hợp nhất. Trả về JSON (không thêm text nào khác, không có markdown):
+{"title": "tiêu đề sáng tạo 3-8 từ phù hợp toàn bộ tác phẩm", "tags": "4-6 tags liên quan, viết thường, phân cách bằng dấu phẩy, không có dấu #"}`
+        ])
+
+        const text = result.response.text().trim()
+        const clean = text.replace(/```json|```/g, '').trim()
+        const parsed = JSON.parse(clean)
+
+        return res.status(200).json({ status: 'success', title: parsed.title || '', tags: parsed.tags || '' })
+      } catch (error) {
+        lastError = error
+        if (error.status === 429 || error.status === 503 || error.status === 404) {
+          if (error.status === 503) await sleep(3000)
+          continue
+        }
+        throw error
+      }
+    }
+    throw lastError
+  } catch (error) {
+    console.error('analyzeMultipleImages error:', error)
+    if (error.status === 429) return res.status(429).json({ status: 'error', message: 'AI hết giới hạn miễn phí hôm nay.' })
+    if (error.status === 503) return res.status(503).json({ status: 'error', message: 'AI đang quá tải, thử lại sau.' })
+    return res.status(500).json({ status: 'error', message: 'Không thể phân tích ảnh. Vui lòng thử lại.' })
+  }
+}
+
+export const analyzeImage = async (req, res) => {
+  try {
+    const { imageBase64, mimeType } = req.body
+
+    if (!imageBase64 || !mimeType) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Vui lòng cung cấp ảnh (imageBase64 và mimeType)'
+      })
+    }
+
+    let lastError
+    for (const modelName of MODELS) {
+      try {
+        console.log(`Thử model vision: ${modelName}`)
+        const model = genAI.getGenerativeModel({ model: modelName })
+
+        const result = await model.generateContent([
+          {
+            inlineData: {
+              data: imageBase64,
+              mimeType: mimeType
+            }
+          },
+          `Bạn là chuyên gia thiết kế nghệ thuật. Hãy phân tích tác phẩm trong ảnh và trả về JSON theo đúng định dạng sau (không thêm bất kỳ text nào khác, không có markdown):
+{"title": "tiêu đề sáng tạo ngắn gọn 3-8 từ tiếng Việt hoặc tiếng Anh phù hợp phong cách tác phẩm", "tags": "4-6 tags liên quan, viết thường, phân cách bằng dấu phẩy, không có dấu #"}`
+        ])
+
+        const text = result.response.text().trim()
+        const clean = text.replace(/```json|```/g, '').trim()
+        const parsed = JSON.parse(clean)
+
+        return res.status(200).json({
+          status: 'success',
+          title: parsed.title || '',
+          tags: parsed.tags || ''
+        })
+      } catch (error) {
+        lastError = error
+        if (error.status === 429 || error.status === 503 || error.status === 404) {
+          if (error.status === 503) await sleep(3000)
+          continue
+        }
+        throw error
+      }
+    }
+
+    throw lastError
+  } catch (error) {
+    console.error('analyzeImage error:', error)
+
+    if (error.status === 429) {
+      return res.status(429).json({ status: 'error', message: 'AI đã hết giới hạn miễn phí hôm nay. Vui lòng thử lại sau.' })
+    }
+    if (error.status === 503) {
+      return res.status(503).json({ status: 'error', message: 'Dịch vụ AI đang quá tải, vui lòng thử lại sau ít phút.' })
+    }
+    if (error.message?.includes('API_KEY') || error.status === 401 || error.status === 403) {
+      return res.status(503).json({ status: 'error', message: 'Cấu hình API không hợp lệ. Vui lòng kiểm tra GEMINI_API_KEY.' })
+    }
+
+    return res.status(500).json({ status: 'error', message: 'Không thể phân tích ảnh. Vui lòng thử lại.' })
+  }
+}
+
 export const analyzePalette = async (req, res) => {
   try {
     const { colors } = req.body

@@ -63,9 +63,25 @@ const deletePortfolioByAdmin = async (req, res, next) => {
   }
 }
 
+const deleteUserByAdmin = async (req, res, next) => {
+  try {
+    const { id } = req.params
+
+    const result = await adminService.deleteUserByAdmin(id)
+
+    res.status(200).json({
+      status: 'success',
+      message: result.message
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
 export const adminController = {
   getSystemStats,
   getAllUsers,
   changeUserStatus,
-  deletePortfolioByAdmin
+  deletePortfolioByAdmin,
+  deleteUserByAdmin
 }

@@ -1,4 +1,5 @@
 "use client";
+console.log("PDF button reloaded");
 
 import { useState } from "react";
 import { Download, Loader2 } from "lucide-react";
