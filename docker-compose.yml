@@ -1,4 +1,3 @@
-version: '3.8'
 
 services:
   # 1. Database MongoDB Local (Tiện lợi khi test offline không dùng Atlas)
@@ -49,6 +48,7 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:5000
       - NEXT_PUBLIC_SOCKET_URL=http://localhost:5000
+      - API_URL=http://artfolio-api:5000
       - NEXT_PUBLIC_USE_MOCK_API=false
     volumes:
       - ./artfolio-web:/app
