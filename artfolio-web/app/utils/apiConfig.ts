@@ -5,7 +5,11 @@ function normalizeApiOrigin(value?: string) {
   return raw.endsWith("/api") ? raw.slice(0, -4) : raw;
 }
 
-export const API_ORIGIN = normalizeApiOrigin(process.env.NEXT_PUBLIC_API_URL);
+const isServer = typeof window === "undefined";
+const serverApiUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL;
+const clientApiUrl = process.env.NEXT_PUBLIC_API_URL;
+
+export const API_ORIGIN = normalizeApiOrigin(isServer ? serverApiUrl : clientApiUrl);
 export const API_BASE_URL = `${API_ORIGIN}/api`;
 
 export function getApiUrl(path = "") {
