@@ -79,6 +79,7 @@ export default function CreatePortfolioPage() {
   // AI State
   const [aiSuggestedTitle, setAiSuggestedTitle] = useState("");
   const [aiSuggestedTags, setAiSuggestedTags] = useState("");
+  const [aiSuggestedDescription, setAiSuggestedDescription] = useState("");
   const [aiError, setAiError] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
@@ -186,6 +187,7 @@ export default function CreatePortfolioPage() {
     setAiError("");
     setAiSuggestedTitle("");
     setAiSuggestedTags("");
+    setAiSuggestedDescription("");
 
     try {
       // Convert ảnh được chọn sang base64
@@ -214,6 +216,7 @@ export default function CreatePortfolioPage() {
       if (res.ok && data.status === "success") {
         setAiSuggestedTitle(data.title || "");
         setAiSuggestedTags(data.tags || "");
+        setAiSuggestedDescription(data.description || "");
       } else {
         setAiError(data.message || "Không thể phân tích ảnh. Vui lòng thử lại.");
       }
@@ -234,6 +237,7 @@ export default function CreatePortfolioPage() {
     setAiError("");
     setAiSuggestedTitle("");
     setAiSuggestedTags("");
+    setAiSuggestedDescription("");
 
     try {
       // Convert tất cả ảnh sang base64
@@ -263,6 +267,7 @@ export default function CreatePortfolioPage() {
       if (res.ok && data.status === "success") {
         setAiSuggestedTitle(data.title || "");
         setAiSuggestedTags(data.tags || "");
+        setAiSuggestedDescription(data.description || "");
       } else {
         setAiError(data.message || "Không thể phân tích ảnh. Vui lòng thử lại.");
       }
@@ -276,6 +281,7 @@ export default function CreatePortfolioPage() {
   const applyAISuggestions = () => {
     if (aiSuggestedTitle) setValue("title", aiSuggestedTitle);
     if (aiSuggestedTags) setValue("tags", aiSuggestedTags);
+    if (aiSuggestedDescription) setValue("description", aiSuggestedDescription);
   };
 
   const onSubmit = async (values: CreateFormValues) => {
@@ -403,10 +409,17 @@ export default function CreatePortfolioPage() {
             </label>
 
             <label className="field">
-              <span className="label">Mô tả</span>
+              <span className="label flex items-center gap-2">
+                Mô tả
+                {aiSuggestedDescription && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary bg-primary/10 border border-primary/30 px-1.5 py-0.5 rounded-full">
+                    <Sparkles className="h-2.5 w-2.5" /> AI đã gợi ý
+                  </span>
+                )}
+              </span>
               <textarea
                 rows={4}
-                className={`input py-3 ${errors.description ? "input-error" : ""}`}
+                className={`input py-3 ${errors.description ? "input-error" : ""} ${aiSuggestedDescription ? "ring-1 ring-primary/30 border-primary/40" : ""}`}
                 placeholder="Giới thiệu về quá trình và cảm hứng của bạn..."
                 {...register("description")}
               />
@@ -538,7 +551,7 @@ export default function CreatePortfolioPage() {
             {/* AI Phân Tích Ảnh */}
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-5">
               <div className="flex items-center justify-between mb-3">
-                <span className="label text-primary">AI Gợi Ý Tiêu Đề & Tags</span>
+                <span className="label text-primary">AI Gợi Ý Tiêu Đề, Tags & Mô Tả ✨</span>
                 <div className="flex gap-2">
                   {imageFiles.length > 1 && (
                     <button
@@ -571,36 +584,78 @@ export default function CreatePortfolioPage() {
                 </p>
               )}
 
-              {(aiSuggestedTitle || aiSuggestedTags) && (
-                <div className="mt-2 rounded-lg border border-primary/30 bg-surface p-4 text-sm leading-relaxed">
-                  <span className="font-bold text-primary block mb-2">🤖 Gợi ý từ AI:</span>
+              {(aiSuggestedTitle || aiSuggestedTags || aiSuggestedDescription) && (
+                <div className="mt-2 rounded-lg border border-primary/30 bg-surface p-4 text-sm leading-relaxed space-y-3">
+                  <span className="font-bold text-primary block">🤖 Gợi ý từ AI:</span>
+
                   {aiSuggestedTitle && (
-                    <div className="mb-2">
-                      <span className="text-muted font-semibold">Tiêu đề: </span>
-                      <span className="text-foreground">{aiSuggestedTitle}</span>
+                    <div className="rounded-lg border border-border bg-surface-soft p-3">
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <span className="text-xs font-semibold text-muted uppercase tracking-wide">Tiêu đề</span>
+                        <button
+                          type="button"
+                          onClick={() => setValue("title", aiSuggestedTitle)}
+                          className="shrink-0 text-[11px] font-semibold text-primary hover:underline"
+                        >
+                          ✓ Áp dụng
+                        </button>
+                      </div>
+                      <p className="text-foreground font-medium">{aiSuggestedTitle}</p>
                     </div>
                   )}
+
                   {aiSuggestedTags && (
-                    <div className="mb-3">
-                      <span className="text-muted font-semibold">Tags: </span>
-                      <span className="text-foreground">{aiSuggestedTags}</span>
+                    <div className="rounded-lg border border-border bg-surface-soft p-3">
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <span className="text-xs font-semibold text-muted uppercase tracking-wide">Tags</span>
+                        <button
+                          type="button"
+                          onClick={() => setValue("tags", aiSuggestedTags)}
+                          className="shrink-0 text-[11px] font-semibold text-primary hover:underline"
+                        >
+                          ✓ Áp dụng
+                        </button>
+                      </div>
+                      <p className="text-foreground">{aiSuggestedTags}</p>
                     </div>
                   )}
+
+                  {aiSuggestedDescription && (
+                    <div className="rounded-lg border border-primary/40 bg-primary/5 p-3">
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-semibold text-primary uppercase tracking-wide">Mô tả</span>
+                          <span className="text-[10px] text-muted bg-surface px-1.5 py-0.5 rounded-full border border-border">
+                            {aiSuggestedDescription.length} ký tự
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setValue("description", aiSuggestedDescription)}
+                          className="shrink-0 text-[11px] font-semibold text-primary hover:underline"
+                        >
+                          ✓ Áp dụng
+                        </button>
+                      </div>
+                      <p className="text-foreground leading-relaxed">{aiSuggestedDescription}</p>
+                    </div>
+                  )}
+
                   <button
                     type="button"
                     onClick={applyAISuggestions}
-                    className="btn btn-primary h-8 px-4 text-xs rounded-full"
+                    className="btn btn-primary h-8 px-4 text-xs rounded-full w-full"
                   >
-                    ✓ Áp dụng gợi ý
+                    ✓ Áp dụng tất cả
                   </button>
                 </div>
               )}
 
-              {!aiSuggestedTitle && !aiSuggestedTags && !aiError && !isAnalyzing && (
+              {!aiSuggestedTitle && !aiSuggestedTags && !aiSuggestedDescription && !aiError && !isAnalyzing && (
                 <p className="text-xs text-muted">
                   {imageFiles.length > 1
                     ? `Click vào ảnh để chọn ảnh phân tích (đang chọn Ảnh ${selectedImageIndex + 1}), rồi nhấn "Phân Tích Ảnh".`
-                    : `Tải ảnh lên rồi nhấn "Phân Tích Ảnh" để AI gợi ý tiêu đề và tags phù hợp.`}
+                    : `Tải ảnh lên rồi nhấn "Phân Tích Ảnh" để AI gợi ý tiêu đề, tags và mô tả phù hợp.`}
                 </p>
               )}
             </div>

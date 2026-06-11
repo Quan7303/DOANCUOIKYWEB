@@ -68,15 +68,30 @@ export const analyzeMultipleImages = async (req, res) => {
 
         const result = await model.generateContent([
           ...imageParts,
-          `Bạn là chuyên gia thiết kế nghệ thuật. Hãy xem tất cả ${imageParts.length} ảnh trên (đây là các ảnh của cùng 1 tác phẩm/bộ sưu tập) và đề xuất 1 tiêu đề + tags chung phù hợp nhất. Trả về JSON (không thêm text nào khác, không có markdown):
-{"title": "tiêu đề sáng tạo 3-8 từ phù hợp toàn bộ tác phẩm", "tags": "4-6 tags liên quan, viết thường, phân cách bằng dấu phẩy, không có dấu #"}`
+          `Bạn là chuyên gia thiết kế nghệ thuật. Hãy xem tất cả ${imageParts.length} ảnh trên (đây là các ảnh của cùng 1 tác phẩm/bộ sưu tập).
+
+NHIỆM VỤ: Trả về đúng 1 JSON object với 3 trường bắt buộc, KHÔNG thêm bất kỳ text nào khác ngoài JSON:
+{
+  "title": "tiêu đề sáng tạo 3-8 từ phù hợp toàn bộ tác phẩm",
+  "tags": "4-6 tags liên quan, viết thường, phân cách bằng dấu phẩy, không có dấu #",
+  "description": "mô tả 2-4 câu bằng tiếng Việt: phong cách nghệ thuật, cảm hứng sáng tác, điểm nổi bật của tác phẩm, phù hợp đăng portfolio sáng tạo"
+}
+
+QUAN TRỌNG: Trường "description" là BẮT BUỘC, không được bỏ trống.`
         ])
 
         const text = result.response.text().trim()
-        const clean = text.replace(/```json|```/g, '').trim()
+        console.log('[analyzeMultipleImages] raw Gemini response:', text.slice(0, 300))
+
+        // Robust JSON extraction: tìm {...} đầu tiên trong response
+        const jsonMatch = text.match(/\{[\s\S]*\}/)
+        if (!jsonMatch) throw new Error('Gemini không trả về JSON hợp lệ')
+        const clean = jsonMatch[0]
         const parsed = JSON.parse(clean)
 
-        return res.status(200).json({ status: 'success', title: parsed.title || '', tags: parsed.tags || '' })
+        console.log('[analyzeMultipleImages] parsed:', { title: parsed.title, tags: parsed.tags, descLen: (parsed.description || '').length })
+
+        return res.status(200).json({ status: 'success', title: parsed.title || '', tags: parsed.tags || '', description: parsed.description || '' })
       } catch (error) {
         lastError = error
         if (error.status === 429 || error.status === 503 || error.status === 404) {
@@ -119,18 +134,34 @@ export const analyzeImage = async (req, res) => {
               mimeType: mimeType
             }
           },
-          `Bạn là chuyên gia thiết kế nghệ thuật. Hãy phân tích tác phẩm trong ảnh và trả về JSON theo đúng định dạng sau (không thêm bất kỳ text nào khác, không có markdown):
-{"title": "tiêu đề sáng tạo ngắn gọn 3-8 từ tiếng Việt hoặc tiếng Anh phù hợp phong cách tác phẩm", "tags": "4-6 tags liên quan, viết thường, phân cách bằng dấu phẩy, không có dấu #"}`
+          `Bạn là chuyên gia thiết kế nghệ thuật. Hãy phân tích tác phẩm trong ảnh.
+
+NHIỆM VỤ: Trả về đúng 1 JSON object với 3 trường bắt buộc, KHÔNG thêm bất kỳ text nào khác ngoài JSON:
+{
+  "title": "tiêu đề sáng tạo ngắn gọn 3-8 từ tiếng Việt hoặc tiếng Anh phù hợp phong cách tác phẩm",
+  "tags": "4-6 tags liên quan, viết thường, phân cách bằng dấu phẩy, không có dấu #",
+  "description": "mô tả 2-4 câu bằng tiếng Việt: phong cách nghệ thuật, cảm hứng sáng tác, điểm nổi bật của tác phẩm, phù hợp đăng portfolio sáng tạo"
+}
+
+QUAN TRỌNG: Trường "description" là BẮT BUỘC, không được bỏ trống.`
         ])
 
         const text = result.response.text().trim()
-        const clean = text.replace(/```json|```/g, '').trim()
+        console.log('[analyzeImage] raw Gemini response:', text.slice(0, 300))
+
+        // Robust JSON extraction: tìm {...} đầu tiên trong response
+        const jsonMatch = text.match(/\{[\s\S]*\}/)
+        if (!jsonMatch) throw new Error('Gemini không trả về JSON hợp lệ')
+        const clean = jsonMatch[0]
         const parsed = JSON.parse(clean)
+
+        console.log('[analyzeImage] parsed:', { title: parsed.title, tags: parsed.tags, descLen: (parsed.description || '').length })
 
         return res.status(200).json({
           status: 'success',
           title: parsed.title || '',
-          tags: parsed.tags || ''
+          tags: parsed.tags || '',
+          description: parsed.description || ''
         })
       } catch (error) {
         lastError = error
