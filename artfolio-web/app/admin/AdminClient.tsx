@@ -182,7 +182,9 @@ export default function AdminClient() {
 
   useEffect(() => {
     if (isAuthenticated && user?.role === "admin" && accessToken) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchStats();
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchUsers(1, "");
     }
   }, [isAuthenticated, user, accessToken, fetchStats, fetchUsers]);
