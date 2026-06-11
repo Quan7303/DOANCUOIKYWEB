@@ -7,6 +7,12 @@ import { ApiError } from '~/utils/ApiError.js'
 
 // Giả lập các dependencies ngoài
 vi.mock('~/models/userModel.js')
+vi.mock('~/services/otpService.js', () => ({
+  createOTP: vi.fn().mockResolvedValue('123456')
+}))
+vi.mock('~/services/emailService.js', () => ({
+  sendOTPEmail: vi.fn().mockResolvedValue()
+}))
 vi.mock('bcryptjs', () => ({
   default: {
     genSalt: vi.fn().mockResolvedValue('mock-salt'),
@@ -49,11 +55,7 @@ describe('Auth Service Tests', () => {
       })
 
       expect(result).toEqual({
-        _id: 'user-id-123',
-        name: 'Nguyen Van A',
-        email: 'test@example.com',
-        role: 'user',
-        active: 'active'
+        message: 'Tạo tài khoản thành công! Vui lòng kiểm tra email để lấy mã xác thực OTP.'
       })
       expect(User.findOne).toHaveBeenCalledWith({ email: 'test@example.com' })
       expect(User.create).toHaveBeenCalled()
