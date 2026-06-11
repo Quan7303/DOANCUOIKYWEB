@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Users,
   Image as ImageIcon,
@@ -299,15 +300,15 @@ export default function AdminClient() {
 
       <div className="app-container mt-6 space-y-5">
         {/* Hàng trên: biểu đồ + stat cards */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           {/* Biểu đồ phân tích */}
-          <div className="xl:col-span-2 bg-white dark:bg-[#1e2637] rounded-2xl border border-black/5 dark:border-white/5 shadow-sm p-5">
+          <div className="lg:col-span-2 bg-white dark:bg-[#1e2637] rounded-2xl border border-black/5 dark:border-white/5 shadow-sm p-5">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="font-bold text-foreground">Phân Tích Lượt Xem</h2>
                 <p className="text-xs text-muted mt-0.5">Thống kê lượt xem theo thời gian</p>
               </div>
-              <span className="text-xs bg-blue-500/10 text-blue-500 font-semibold px-2.5 py-1 rounded-full">Xem tất cả</span>
+              <Link href="/portfolios" className="text-xs bg-blue-500/10 text-blue-500 font-semibold px-2.5 py-1 rounded-full hover:bg-blue-500/20 transition-colors">Xem tất cả</Link>
             </div>
             <BieuDoThongKe tongLuotXem={stats?.totalViews ?? 0} />
           </div>
