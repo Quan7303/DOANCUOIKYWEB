@@ -160,6 +160,13 @@ const deleteUserByAdmin = async (userId) => {
       // Xóa tất cả portfolios của user
       await Portfolio.deleteMany({ user: userId }).session(session)
 
+      // Xóa tất cả các reply con trỏ đến các comment do user viết
+      const userComments = await Comment.find({ user: userId }).select('_id').session(session)
+      if (userComments.length > 0) {
+        const userCommentIds = userComments.map(c => c._id)
+        await Comment.deleteMany({ parentId: { $in: userCommentIds } }).session(session)
+      }
+
       // Xóa tất cả comments do user viết
       await Comment.deleteMany({ user: userId }).session(session)
 
