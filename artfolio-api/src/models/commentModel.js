@@ -17,6 +17,11 @@ const commentSchema = new mongoose.Schema(
       required: [true, 'Nội dung bình luận không được bỏ trống'],
       trim: true,
       maxlength: [500, 'Nội dung bình luận không được vượt quá 500 ký tự']
+    },
+    parentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Comment',
+      default: null
     }
   },
   {
@@ -24,7 +29,7 @@ const commentSchema = new mongoose.Schema(
   }
 )
 
-// Đánh chỉ mục để sắp xếp bình luận mới nhất lên đầu tiên nhanh chóng
 commentSchema.index({ portfolio: 1, createdAt: -1 })
+commentSchema.index({ parentId: 1 })
 
 export default mongoose.model('Comment', commentSchema)

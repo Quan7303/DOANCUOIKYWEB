@@ -31,6 +31,7 @@ export type PortfolioComment = {
   };
   text: string;
   createdAt: string;
+  parentId?: string | null;
 };
 
 export type ApiListResponse<T> = {

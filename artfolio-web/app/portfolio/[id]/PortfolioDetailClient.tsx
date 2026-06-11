@@ -82,6 +82,7 @@ function normalizeComment(comment: RawComment): Comment {
     user: comment.user,
     text: comment.text || comment.content || "",
     createdAt: comment.createdAt,
+    parentId: comment.parentId || null,
   };
 }
 
@@ -143,6 +144,8 @@ export default function PortfolioDetailClient({
   const [likesCount, setLikesCount] = useState(initialPortfolio?.likesCount || 0);
   const [commentText, setCommentText] = useState("");
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [replyingToId, setReplyingToId] = useState<string | null>(null);
+  const [isSubmittingReply, setIsSubmittingReply] = useState(false);
   const [notice, setNotice] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeletingPortfolio, setIsDeletingPortfolio] = useState(false);
@@ -201,8 +204,7 @@ export default function PortfolioDetailClient({
           if (current.some((comment) => comment._id === payload.comment._id)) {
             return current;
           }
-
-          return [normalizeComment(payload.comment), ...current];
+          return [...current, normalizeComment(payload.comment)];
         });
       },
     );
@@ -581,7 +583,53 @@ export default function PortfolioDetailClient({
     }
   }
 
-  async function handleDeleteComment(commentId: string) {
+  async function handleReply(parentId: string, text: string) {
+    if (!isAuthenticated || !currentUser || !accessToken) return;
+    setIsSubmittingReply(true);
+
+    const optimisticReply: Comment = {
+      _id: `local-reply-${Date.now()}`,
+      text,
+      parentId,
+      user: { _id: currentUserId, name: currentUser.name, avatar: currentUser.avatar },
+      createdAt: new Date().toISOString(),
+    };
+
+    setComments((current) => [...current, optimisticReply]);
+    setReplyingToId(null);
+
+    try {
+      const response = await fetch(getApiUrl("comments"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ portfolioId, text, parentId }),
+      });
+
+      const json = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(json?.message || "Không thể gửi trả lời.");
+      }
+
+      if (json?.data) {
+        setComments((current) => {
+          const filtered = current.filter((c) => c._id !== optimisticReply._id);
+          if (filtered.some((c) => c._id === json.data._id)) return filtered;
+          return [...filtered, normalizeComment(json.data)];
+        });
+      }
+    } catch (error) {
+      setComments((current) => current.filter((c) => c._id !== optimisticReply._id));
+      setNotice(error instanceof Error ? error.message : "Không thể gửi trả lời.");
+    } finally {
+      setIsSubmittingReply(false);
+    }
+  }
+
+  async function handleDeleteComment(commentId: string, parentId?: string | null) {
     setNotice("");
 
     if (!accessToken) {
@@ -605,9 +653,13 @@ export default function PortfolioDetailClient({
         throw new Error(json?.message || "Không thể xóa bình luận.");
       }
 
-      setComments((current) =>
-        current.filter((comment) => comment._id !== commentId),
-      );
+      setComments((current) => {
+        if (!parentId) {
+          // Xóa root + tất cả replies
+          return current.filter((c) => c._id !== commentId && c.parentId !== commentId);
+        }
+        return current.filter((c) => c._id !== commentId);
+      });
     } catch (error) {
       setNotice(
         error instanceof Error ? error.message : "Không thể xóa bình luận.",
@@ -1106,70 +1158,128 @@ export default function PortfolioDetailClient({
                 </div>
               )}
 
-              <div className="grid max-h-[520px] gap-3 overflow-y-auto pr-1">
-                {comments.length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-border p-5 text-center text-sm text-muted">
-                    Chưa có bình luận nào.
-                  </p>
-                ) : (
-                  comments.map((comment) => {
-                    const isMyComment = currentUserId === comment.user._id;
+              {(() => {
+                const rootComments = comments
+                  .filter((c) => !c.parentId)
+                  .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+                const repliesMap: Record<string, Comment[]> = {};
+                comments
+                  .filter((c) => c.parentId)
+                  .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+                  .forEach((c) => {
+                    const pid = c.parentId!;
+                    if (!repliesMap[pid]) repliesMap[pid] = [];
+                    repliesMap[pid].push(c);
+                  });
 
-                    return (
-                      <article
-                        key={comment._id}
-                        className="group rounded-lg border border-border bg-surface-soft p-4"
-                      >
-                        <div className="flex items-start gap-3">
-                          <Link
-                            href={`/profile/${comment.user._id}`}
-                            className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-sm font-bold text-white"
-                          >
-                            {comment.user.avatar && comment.user.avatar !== "default-avatar.png" ? (
-                              <img
-                                src={comment.user.avatar}
-                                alt={comment.user.name}
-                                className="h-full w-full rounded-full object-cover"
-                              />
-                            ) : (
-                              getInitials(comment.user.name)
-                            )}
-                          </Link>
+                if (rootComments.length === 0) {
+                  return (
+                    <p className="rounded-lg border border-dashed border-border p-5 text-center text-sm text-muted">
+                      Chưa có bình luận nào.
+                    </p>
+                  );
+                }
 
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <Link
-                                  href={`/profile/${comment.user._id}`}
-                                  className="font-bold hover:text-primary"
-                                >
-                                  {comment.user.name}
-                                </Link>
-                                <p className="text-xs text-muted">
-                                  {formatDate(comment.createdAt)}
-                                </p>
+                return (
+                  <div className="grid max-h-[600px] gap-3 overflow-y-auto pr-1">
+                    {rootComments.map((comment) => {
+                      const isMyComment = currentUserId === comment.user._id;
+                      const replies = repliesMap[comment._id] || [];
+
+                      return (
+                        <article key={comment._id} className="group rounded-lg border border-border bg-surface-soft p-4">
+                          {/* Comment gốc */}
+                          <div className="flex items-start gap-3">
+                            <Link href={`/profile/${comment.user._id}`} className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-sm font-bold text-white overflow-hidden">
+                              {comment.user.avatar && comment.user.avatar !== "default-avatar.png" ? (
+                                <img src={comment.user.avatar} alt={comment.user.name} className="h-full w-full rounded-full object-cover" />
+                              ) : (
+                                getInitials(comment.user.name)
+                              )}
+                            </Link>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <Link href={`/profile/${comment.user._id}`} className="font-bold hover:text-primary">{comment.user.name}</Link>
+                                  <p className="text-xs text-muted">{formatDate(comment.createdAt)}</p>
+                                </div>
+                                {isMyComment && (
+                                  <button type="button" onClick={() => handleDeleteComment(comment._id, null)}
+                                    className="rounded-md p-1.5 text-muted opacity-0 transition hover:bg-danger/10 hover:text-danger group-hover:opacity-100" title="Xóa bình luận">
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                )}
                               </div>
-                              {isMyComment && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteComment(comment._id)}
-                                  className="rounded-md p-1.5 text-muted opacity-0 transition hover:bg-danger/10 hover:text-danger group-hover:opacity-100"
-                                  title="Xóa bình luận"
-                                >
-                                  <Trash2 className="h-4 w-4" />
+                              <p className="mt-2 whitespace-pre-wrap text-sm leading-6">{comment.text}</p>
+                              {isAuthenticated && (
+                                <button type="button"
+                                  onClick={() => setReplyingToId(replyingToId === comment._id ? null : comment._id)}
+                                  className="mt-1 text-xs font-semibold text-muted hover:text-primary transition-colors">
+                                  {replyingToId === comment._id ? "Hủy" : "Trả lời"}
                                 </button>
                               )}
+                              {replyingToId === comment._id && (
+                                <form className="mt-2 flex gap-2" onSubmit={(e) => { e.preventDefault(); const el = e.currentTarget.querySelector("input") as HTMLInputElement; if (el.value.trim().length >= 2) handleReply(comment._id, el.value.trim()); }}>
+                                  <input autoFocus className="input flex-1 text-sm h-8 py-1" placeholder={`Trả lời ${comment.user.name}...`} />
+                                  <button type="submit" disabled={isSubmittingReply} className="btn btn-primary h-8 px-3 text-xs">{isSubmittingReply ? "..." : "Gửi"}</button>
+                                  <button type="button" onClick={() => setReplyingToId(null)} className="btn h-8 px-3 text-xs border border-border bg-surface text-muted hover:bg-surface-soft">Hủy</button>
+                                </form>
+                              )}
                             </div>
-                            <p className="mt-2 whitespace-pre-wrap text-sm leading-6">
-                              {comment.text}
-                            </p>
                           </div>
-                        </div>
-                      </article>
-                    );
-                  })
-                )}
-              </div>
+
+                          {/* Replies */}
+                          {replies.length > 0 && (
+                            <div className="mt-3 ml-12 grid gap-3 border-l-2 border-border pl-4">
+                              {replies.map((reply) => {
+                                const isMyReply = currentUserId === reply.user._id;
+                                return (
+                                  <div key={reply._id} className="group/reply flex items-start gap-2">
+                                    <Link href={`/profile/${reply.user._id}`} className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary text-xs font-bold text-white overflow-hidden">
+                                      {reply.user.avatar && reply.user.avatar !== "default-avatar.png" ? (
+                                        <img src={reply.user.avatar} alt={reply.user.name} className="h-full w-full rounded-full object-cover" />
+                                      ) : getInitials(reply.user.name)}
+                                    </Link>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div>
+                                          <Link href={`/profile/${reply.user._id}`} className="text-sm font-bold hover:text-primary">{reply.user.name}</Link>
+                                          <p className="text-xs text-muted">{formatDate(reply.createdAt)}</p>
+                                        </div>
+                                        {isMyReply && (
+                                          <button type="button" onClick={() => handleDeleteComment(reply._id, reply.parentId)}
+                                            className="rounded-md p-1 text-muted opacity-0 transition hover:bg-danger/10 hover:text-danger group-hover/reply:opacity-100" title="Xóa">
+                                            <Trash2 className="h-3.5 w-3.5" />
+                                          </button>
+                                        )}
+                                      </div>
+                                      <p className="mt-1 whitespace-pre-wrap text-sm leading-6">{reply.text}</p>
+                                      {isAuthenticated && (
+                                        <button type="button"
+                                          onClick={() => setReplyingToId(replyingToId === reply._id ? null : reply._id)}
+                                          className="mt-1 text-xs font-semibold text-muted hover:text-primary transition-colors">
+                                          {replyingToId === reply._id ? "Hủy" : "Trả lời"}
+                                        </button>
+                                      )}
+                                      {replyingToId === reply._id && (
+                                        <form className="mt-2 flex gap-2" onSubmit={(e) => { e.preventDefault(); const el = e.currentTarget.querySelector("input") as HTMLInputElement; if (el.value.trim().length >= 2) handleReply(comment._id, el.value.trim()); }}>
+                                          <input autoFocus className="input flex-1 text-sm h-8 py-1" placeholder={`Trả lời ${reply.user.name}...`} />
+                                          <button type="submit" disabled={isSubmittingReply} className="btn btn-primary h-8 px-3 text-xs">{isSubmittingReply ? "..." : "Gửi"}</button>
+                                          <button type="button" onClick={() => setReplyingToId(null)} className="btn h-8 px-3 text-xs border border-border bg-surface text-muted hover:bg-surface-soft">Hủy</button>
+                                        </form>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </article>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </section>
           </aside>
         </div>

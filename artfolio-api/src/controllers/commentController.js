@@ -15,7 +15,7 @@ const getCommentsByPortfolio = async (req, res, next) => {
 
     const comments = await Comment.find({ portfolio: portfolioId })
       .populate('user', 'name avatar')
-      .sort({ createdAt: -1 })
+      .sort({ createdAt: 1 })
 
     res.status(200).json({
       status: 'success',
@@ -30,7 +30,7 @@ const getCommentsByPortfolio = async (req, res, next) => {
 
 const createComment = async (req, res, next) => {
   try {
-    const { portfolioId, text } = req.body
+    const { portfolioId, text, parentId } = req.body
     const senderId = req.user._id
 
     if (!portfolioId) {
@@ -38,6 +38,17 @@ const createComment = async (req, res, next) => {
     }
     if (!text || !text.trim()) {
       return next(new ApiError(400, 'Nội dung bình luận không được bỏ trống.'))
+    }
+
+    // Validate parentId nếu có
+    if (parentId) {
+      const parentComment = await Comment.findById(parentId)
+      if (!parentComment) {
+        return next(new ApiError(404, 'Bình luận gốc không tồn tại.'))
+      }
+      // Chỉ cho phép reply 1 cấp (reply của reply vẫn gắn vào comment gốc)
+      const resolvedParentId = parentComment.parentId ? parentComment.parentId : parentComment._id
+      req.body.parentId = resolvedParentId
     }
 
     const portfolio = await Portfolio.findById(portfolioId).populate('user', '_id name')
@@ -48,7 +59,8 @@ const createComment = async (req, res, next) => {
     const newComment = await Comment.create({
       portfolio: portfolioId,
       user: senderId,
-      text: text.trim()
+      text: text.trim(),
+      parentId: req.body.parentId || null
     })
 
     const populatedComment = await newComment.populate('user', 'name avatar')
@@ -102,6 +114,11 @@ const deleteComment = async (req, res, next) => {
 
     if (!isOwner && !isAdmin) {
       return next(new ApiError(403, 'Bạn không có quyền xóa bình luận này.'))
+    }
+
+    // Xóa cả các reply con nếu là comment gốc
+    if (!comment.parentId) {
+      await Comment.deleteMany({ parentId: req.params.id })
     }
 
     await Comment.findByIdAndDelete(req.params.id)
